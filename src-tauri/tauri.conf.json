@@ -1,0 +1,77 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Radial Menu",
+  "version": "0.1.0",
+  "identifier": "com.mrbeohp.radialmenu",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Radial Menu — Cài đặt",
+        "width": 1080,
+        "height": 720,
+        "center": true,
+        "visible": false,
+        "backgroundColor": "#101217",
+        "theme": "Dark",
+        "resizable": false,
+        "maximizable": false
+      },
+      {
+        "label": "menu",
+        "title": "Radial Menu – menu",
+        "url": "menu.html",
+        "width": 520,
+        "height": 520,
+        "transparent": true,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "visible": false,
+        "focus": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "Menu tròn thay menu chuột phải",
+    "category": "Utility",
+    "publisher": "MrBeoHP",
+    "copyright": "© 2026 MrBeoHP",
+    "longDescription": "Nhấn giữ chuột phải và kéo nhẹ để mở menu tròn 8 hướng, lệnh tự đổi theo ứng dụng đang dùng.",
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "languages": [
+          "Vietnamese"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "installer-hooks.nsh"
+      }
+    }
+  }
+}

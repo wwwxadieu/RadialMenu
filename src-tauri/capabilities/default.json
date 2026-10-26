@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Quyền cho cửa sổ nhật ký và cửa sổ menu",
+  "windows": [
+    "main",
+    "menu"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

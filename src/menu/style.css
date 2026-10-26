@@ -1,0 +1,593 @@
+/*
+ * Menu tròn. Cửa sổ 520×520 px logic (khớp overlay.rs); sân khấu 360×360 ở giữa,
+ * chừa chỗ cho bóng đổ và vòng gợn sóng. Thông số animation lấy từ mockup đã chốt.
+ * Chỉ animate transform và opacity.
+ */
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+.menu {
+  /* --accent, --accent-rgb, --accent-ink: gán từ cài đặt (main.ts). */
+  --accent: #7c83ff;
+  --accent-rgb: 124, 131, 255;
+  --accent-ink: #06121a;
+  --ink: #f5f7fa;
+  --sub: #c0c6d0;
+  --disc-bg: rgba(20, 23, 30, 0.9);
+  --disc-border: rgba(255, 255, 255, 0.2);
+  --disc-sheen: rgba(255, 255, 255, 0.3);
+  --tint: rgba(16, 19, 26, 0.5);
+  --gloss: rgba(255, 255, 255, 0.2);
+  --tile: rgba(255, 255, 255, 0.07);
+  --hub-bg: rgba(12, 14, 19, 0.82);
+  --hub-border: rgba(255, 255, 255, 0.18);
+  --chip-bg: rgba(255, 255, 255, 0.08);
+  --chip-border: rgba(255, 255, 255, 0.18);
+  --label-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 0, 0, 0.5);
+  --icon-shadow: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  --rot: 0deg;
+
+  --ease-out: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  position: absolute;
+  left: 80px;
+  top: 80px;
+  width: 360px;
+  height: 360px;
+  color: var(--ink);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+
+/* ---------- Các lớp ---------- */
+
+/*
+ * Gợn sóng: hai lớp gradient mềm (không viền cứng), vẽ ở kích thước cuối rồi thu nhỏ
+ * nên luôn nét. Mỗi lớp có hai animation: phóng to theo một đường cong liền mạch,
+ * và mờ dần theo nhiều mốc, để chỗ đổi độ mờ không làm giật chuyển động.
+ * Vòng sóng đi trước đĩa kính rồi tiếp tục lan ra và tan, không đứng lại quanh menu.
+ */
+.ripple {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 344px;
+  height: 344px;
+  pointer-events: none;
+}
+/* Menu đóng sớm (chọn nhanh, huỷ, kéo quá xa): gợn sóng tan cùng menu, không chạy một mình. */
+.menu:is([data-phase="pick"], [data-phase="cancel"]) .ripple {
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+.ripple > i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+/* Quầng sáng quanh điểm nhấn, chỉ thấy trong chốc lát trước khi đĩa kính phủ lên. */
+.rp-bloom {
+  background: radial-gradient(
+    closest-side,
+    rgba(var(--accent-rgb), 0.26) 0%,
+    rgba(var(--accent-rgb), 0.1) 52%,
+    rgba(var(--accent-rgb), 0.025) 82%,
+    rgba(var(--accent-rgb), 0) 100%
+  );
+}
+/* Vòng sóng: dải sáng nhẹ gần mép ngoài, hai mép tan dần, vệt mờ kéo vào trong như sóng nước. */
+.rp-ring {
+  background: radial-gradient(
+    closest-side,
+    rgba(var(--accent-rgb), 0) 76%,
+    rgba(var(--accent-rgb), 0.05) 84%,
+    rgba(var(--accent-rgb), 0.16) 89.5%,
+    rgba(var(--accent-rgb), 0.3) 93.5%,
+    rgba(var(--accent-rgb), 0.4) 95.5%,
+    rgba(var(--accent-rgb), 0.18) 98%,
+    rgba(var(--accent-rgb), 0) 100%
+  );
+}
+
+@keyframes rp-grow-bloom {
+  from {
+    transform: scale(0.24);
+  }
+  to {
+    transform: scale(0.95);
+  }
+}
+@keyframes rp-grow-ring {
+  from {
+    transform: scale(0.46);
+  }
+  to {
+    transform: scale(1.4);
+  }
+}
+@keyframes rp-fade-bloom {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes rp-fade-ring {
+  0% {
+    opacity: 0;
+    animation-timing-function: ease-out;
+  }
+  10% {
+    opacity: 0.8;
+    animation-timing-function: ease-in-out;
+  }
+  42% {
+    opacity: 0.45;
+    animation-timing-function: ease-in;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.glass {
+  position: absolute;
+  inset: 0;
+  transform-origin: 180px 180px;
+  transform: scale(0.55);
+  will-change: transform;
+}
+
+/*
+ * Đĩa kính, từ dưới lên: nền đục dự phòng → ảnh màn hình đã làm mờ (hiện dần khi
+ * Rust gửi tới, thường sau vài ms) → lớp màu kính + vệt sáng → 8 ô.
+ */
+.disc {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 344px;
+  height: 344px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--disc-bg);
+  border: 1px solid var(--disc-border);
+  box-shadow:
+    inset 0 1px 0 var(--disc-sheen),
+    0 24px 60px rgba(0, 0, 0, 0.35),
+    0 2px 10px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.menu[data-backdrop="on"] .backdrop {
+  opacity: 1;
+}
+
+.tint {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(160deg, var(--gloss) 0%, rgba(255, 255, 255, 0.05) 36%, rgba(255, 255, 255, 0) 58%),
+    var(--tint);
+}
+
+.tiles {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  fill: var(--tile);
+}
+
+.hl {
+  position: absolute;
+  inset: 0;
+  transform-origin: 180px 180px;
+  transform: rotate(var(--rot));
+  filter: drop-shadow(0 0 14px rgba(var(--accent-rgb), 0.55));
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.hl-fill {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 180px 30px, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 70px),
+    var(--accent);
+}
+
+.hl svg {
+  position: absolute;
+  inset: 0;
+}
+
+.hl-arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.item {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 86px;
+  height: 70px;
+  margin: -35px 0 0 -43px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--ink);
+  opacity: 0;
+  transform: translate(var(--ix), var(--iy)) scale(0.5);
+}
+
+.item[hidden] {
+  display: none;
+}
+
+.item svg {
+  flex: none;
+  filter: var(--icon-shadow);
+}
+
+.item span {
+  max-width: 80px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: var(--label-shadow);
+}
+
+.item.on {
+  color: var(--accent-ink);
+}
+.item.on svg {
+  filter: none;
+}
+.item.on span {
+  text-shadow: none;
+}
+
+.hub {
+  position: absolute;
+  left: 124px;
+  top: 124px;
+  width: 112px;
+  height: 112px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--hub-bg);
+  border: 1px solid var(--hub-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 4px 16px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.hub-app,
+.hub-act {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition:
+    opacity 150ms ease,
+    transform 180ms ease;
+}
+
+.hub-app {
+  gap: 4px;
+}
+.hub-app svg {
+  color: var(--accent);
+  stroke-width: 1.8;
+}
+
+/* Icon thật của app dưới con trỏ: thay icon profile khi Rust gửi tới. */
+.hub-appicon {
+  display: none;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 1px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+.menu[data-appicon="on"] .hub-appicon {
+  display: block;
+  animation: icon-in 160ms ease-out;
+}
+.menu[data-appicon="on"] .hub-app svg {
+  display: none;
+}
+@keyframes icon-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+/* Góc đang tắt (Dán khi clipboard trống): mờ, không có vùng sáng. */
+.item.off {
+  --op: 0.32;
+}
+.menu[data-dir-off="true"] .hl {
+  opacity: 0 !important;
+}
+.hub-keys.off {
+  color: var(--sub);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.hub-act {
+  gap: 7px;
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.menu[data-has-dir="true"] .hub-app {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.menu[data-has-dir="true"] .hub-act {
+  opacity: 1;
+  transform: none;
+}
+
+.hub-name {
+  max-width: 90px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.hub-act .hub-name {
+  font-size: 13px;
+}
+
+.hub-proc {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  color: var(--sub);
+}
+
+.hub-keys[hidden] {
+  display: none;
+}
+
+.hub-keys {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sub);
+  white-space: nowrap;
+}
+
+/* ---------- idle: trong suốt hoàn toàn, chờ lần mở sau ---------- */
+
+.menu[data-phase="idle"] *,
+.menu[data-phase="pre"] * {
+  transition: none !important;
+}
+
+/* ---------- pre: điểm xuất phát của animation mở (không bao giờ được vẽ) ---------- */
+
+
+/* ---------- open ---------- */
+
+/* Gợn sóng chạy từ lúc mở; chọn hoặc huỷ sớm thì vẫn chạy nốt chứ không tắt ngang. */
+.menu:is([data-phase="open"], [data-phase="pick"], [data-phase="cancel"]) .rp-bloom {
+  animation:
+    rp-grow-bloom 460ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    rp-fade-bloom 460ms linear both;
+}
+.menu:is([data-phase="open"], [data-phase="pick"], [data-phase="cancel"]) .rp-ring {
+  animation:
+    rp-grow-ring 640ms cubic-bezier(0.25, 1, 0.5, 1) both,
+    rp-fade-ring 640ms both;
+}
+
+.menu[data-phase="open"] .glass {
+  transform: scale(1);
+  transition: transform 380ms cubic-bezier(0.2, 0.9, 0.25, 1.12);
+}
+
+.menu[data-phase="open"] .disc {
+  opacity: 1;
+  transition: opacity 260ms ease-out;
+}
+
+.menu[data-phase="open"] .hub {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    transform 380ms cubic-bezier(0.2, 0.9, 0.25, 1.3) 50ms,
+    opacity 180ms ease 50ms;
+}
+
+.menu[data-phase="open"] .item {
+  opacity: var(--op, 1);
+  transform: scale(1);
+  transition:
+    transform 420ms cubic-bezier(0.2, 0.9, 0.25, 1.25) var(--d),
+    opacity 220ms ease var(--d),
+    color 150ms ease;
+}
+.menu[data-phase="open"] .item.on {
+  transform: scale(1.07);
+}
+.menu[data-phase="open"][data-settled="true"] .item {
+  transition:
+    transform 180ms var(--ease-out),
+    opacity 160ms ease,
+    color 150ms ease;
+}
+
+.menu[data-phase="open"][data-has-dir="true"] .hl {
+  opacity: 1;
+}
+.menu[data-phase="open"] .hl {
+  transition:
+    transform 200ms var(--ease-out),
+    opacity 180ms ease 160ms;
+}
+.menu[data-phase="open"][data-settled="true"] .hl {
+  transition:
+    transform 200ms var(--ease-out),
+    opacity 140ms ease;
+}
+
+/* ---------- pick: góc đã chọn phóng ra rồi tan, phần còn lại thu vào ---------- */
+
+.menu[data-phase="pick"] .glass {
+  transform: scale(0.9);
+  transition: transform 230ms var(--ease-in) 70ms;
+}
+.menu[data-phase="pick"] .disc {
+  opacity: 0;
+  transition: opacity 210ms ease-in 80ms;
+}
+.menu[data-phase="pick"] .hub {
+  opacity: 0;
+  transform: scale(0.86);
+  transition:
+    transform 200ms var(--ease-in) 40ms,
+    opacity 180ms ease-in 40ms;
+}
+.menu[data-phase="pick"] .hl {
+  opacity: 0;
+  transform: rotate(var(--rot)) scale(1.1);
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 200ms ease-in 90ms;
+}
+.menu[data-phase="pick"] .item {
+  opacity: 0;
+  transform: translate(calc(var(--ix) * 0.8), calc(var(--iy) * 0.8)) scale(0.7);
+  transition:
+    transform 180ms var(--ease-in),
+    opacity 150ms ease-in,
+    color 150ms ease;
+}
+.menu[data-phase="pick"] .item.on {
+  transform: translate(calc(var(--ix) * -0.45), calc(var(--iy) * -0.45)) scale(1.18);
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 220ms ease-in 60ms,
+    color 150ms ease;
+}
+
+/* ---------- cancel: mọi thứ co về điểm nhấn, ngược chiều kim đồng hồ ---------- */
+
+.menu[data-phase="cancel"] .glass {
+  transform: scale(0.6);
+  transition: transform 200ms var(--ease-in);
+}
+.menu[data-phase="cancel"] .disc {
+  opacity: 0;
+  transition: opacity 180ms ease-in;
+}
+.menu[data-phase="cancel"] .hub {
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    transform 180ms var(--ease-in),
+    opacity 160ms ease-in;
+}
+.menu[data-phase="cancel"] .hl {
+  opacity: 0;
+  transition: opacity 120ms ease-in;
+}
+.menu[data-phase="cancel"] .item {
+  opacity: 0;
+  transform: translate(var(--ix), var(--iy)) scale(0.6);
+  transition:
+    transform 190ms var(--ease-in) var(--dc),
+    opacity 160ms ease-in var(--dc),
+    color 150ms ease;
+}
+
+/* ---------- Tông sáng ---------- */
+
+.menu[data-tone="light"] {
+  --ink: #141a26;
+  --sub: #4a5263;
+  --disc-bg: rgba(244, 246, 250, 0.94);
+  --disc-border: rgba(20, 26, 38, 0.14);
+  --disc-sheen: rgba(255, 255, 255, 0.9);
+  --tint: rgba(248, 250, 253, 0.55);
+  --gloss: rgba(255, 255, 255, 0.55);
+  --tile: rgba(20, 26, 38, 0.05);
+  --hub-bg: rgba(255, 255, 255, 0.86);
+  --hub-border: rgba(20, 26, 38, 0.12);
+  --chip-bg: rgba(20, 26, 38, 0.06);
+  --chip-border: rgba(20, 26, 38, 0.14);
+  --label-shadow: 0 1px 2px rgba(255, 255, 255, 0.85), 0 0 10px rgba(255, 255, 255, 0.7);
+  --icon-shadow: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.8));
+}
+
+/* Tắt làm mờ: không có ảnh nền, đĩa kính đục hơn để chữ vẫn rõ. */
+.menu[data-blur="off"] .backdrop {
+  display: none;
+}
+.menu[data-blur="off"] .tint {
+  background: linear-gradient(160deg, var(--gloss) 0%, rgba(255, 255, 255, 0.05) 36%, rgba(255, 255, 255, 0) 58%);
+}
+
+/* ---------- Animation theo cài đặt ---------- */
+
+/* "Tắt": hiện và ẩn tức thì, không gợn sóng. */
+.menu[data-motion="off"] * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* "Theo Windows": tắt khi Windows bật Hiệu ứng hoạt ảnh: Tắt. "Luôn bật" bỏ qua dòng này. */
+@media (prefers-reduced-motion: reduce) {
+  .menu[data-motion="system"] * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

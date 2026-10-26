@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.log
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Hệ điều hành và editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+logs/
+
+# Thư mục tạm khi chép mã sang máy
+_to_delete/
