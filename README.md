@@ -50,7 +50,7 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 
 ## Tải về và cài đặt
 
-1. Vào trang [Releases](https://github.com/wwwxadieu/RadialMenu/releases/latest) và tải `RadialMenu_0.1.0_x64-setup.exe`.
+1. Vào trang [Releases](https://github.com/wwwxadieu/RadialMenu/releases/latest) và tải file `RadialMenu_…_x64-setup.exe` ở mục **Assets** (số ở giữa là phiên bản).
 2. Chạy file vừa tải. Bộ cài hỏi quyền Admin vì cài vào `C:\Program Files\Radial Menu` cho mọi tài khoản trên máy.
 3. Bộ cài chưa được ký số, nên Windows SmartScreen có thể hiện cảnh báo. Chọn **More info › Run anyway** để tiếp tục.
 4. Cài xong, Radial Menu chạy dưới khay hệ thống và mở cửa sổ cài đặt.

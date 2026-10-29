@@ -17,7 +17,7 @@ Radial Menu viết bằng Tauri v2: phần lõi (hook chuột, nhận cử chỉ
 
 Cách nhanh nhất: bấm đúp `build.cmd`. Script kiểm tra công cụ, cài gói, build bản debug rồi mở app; log nằm trong `logs\`.
 
-Bộ cài: bấm đúp `build-release.cmd`. Script build bản release, đóng gói `Radial Menu_0.1.0_x64-setup.exe` vào `src-tauri\target\release\bundle\nsis\` rồi mở thư mục đó. Lần đầu Tauri tự tải NSIS về.
+Bộ cài: bấm đúp `build-release.cmd`. Script build bản release, đóng gói `Radial Menu_<phiên bản>_x64-setup.exe` vào `src-tauri\target\release\bundle\nsis\` rồi mở thư mục đó. Lần đầu Tauri tự tải NSIS về.
 
 Hoặc chạy chế độ dev:
 
