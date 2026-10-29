@@ -35,6 +35,7 @@ body {
   --chip-border: rgba(255, 255, 255, 0.18);
   --label-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 0, 0, 0.5);
   --icon-shadow: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  --close: #ff8f8f;
   --rot: 0deg;
 
   --ease-out: cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -66,7 +67,7 @@ body {
   pointer-events: none;
 }
 /* Menu đóng sớm (chọn nhanh, huỷ, kéo quá xa): gợn sóng tan cùng menu, không chạy một mình. */
-.menu:is([data-phase="pick"], [data-phase="cancel"]) .ripple {
+.menu:is([data-phase="pick"], [data-phase="cancel"], [data-phase="away"]) .ripple {
   opacity: 0;
   transition: opacity 160ms ease-out;
 }
@@ -297,7 +298,8 @@ body {
 }
 
 .hub-app,
-.hub-act {
+.hub-act,
+.hub-close {
   position: absolute;
   inset: 0;
   box-sizing: border-box;
@@ -370,6 +372,20 @@ body {
   transform: none;
 }
 
+/* Kéo ra quá xa: dấu X và chữ "Đóng" thay chỗ nội dung app. */
+.hub-close {
+  gap: 5px;
+  opacity: 0;
+  transform: scale(0.8);
+}
+.hub-close svg {
+  color: var(--close);
+  stroke-width: 2.2;
+}
+.hub-close .hub-name {
+  font-size: 13.5px;
+}
+
 .hub-name {
   max-width: 90px;
   font-size: 12.5px;
@@ -418,12 +434,12 @@ body {
 /* ---------- open ---------- */
 
 /* Gợn sóng chạy từ lúc mở; chọn hoặc huỷ sớm thì vẫn chạy nốt chứ không tắt ngang. */
-.menu:is([data-phase="open"], [data-phase="pick"], [data-phase="cancel"]) .rp-bloom {
+.menu:is([data-phase="open"], [data-phase="pick"], [data-phase="cancel"], [data-phase="away"]) .rp-bloom {
   animation:
     rp-grow-bloom 460ms cubic-bezier(0.22, 1, 0.36, 1) both,
     rp-fade-bloom 460ms linear both;
 }
-.menu:is([data-phase="open"], [data-phase="pick"], [data-phase="cancel"]) .rp-ring {
+.menu:is([data-phase="open"], [data-phase="pick"], [data-phase="cancel"], [data-phase="away"]) .rp-ring {
   animation:
     rp-grow-ring 640ms cubic-bezier(0.25, 1, 0.5, 1) both,
     rp-fade-ring 640ms both;
@@ -549,6 +565,53 @@ body {
     color 150ms ease;
 }
 
+/* ---------- away: kéo ra quá xa. Các góc tan trước, giữa menu báo "Đóng" một nhịp,
+   rồi cả đĩa thu về điểm nhấn ---------- */
+
+.menu[data-phase="away"] .hub-app,
+.menu[data-phase="away"] .hub-act {
+  opacity: 0;
+  transform: scale(0.85);
+  transition:
+    opacity 110ms ease,
+    transform 140ms ease;
+}
+.menu[data-phase="away"] .hub-close {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 120ms ease 40ms,
+    transform 220ms cubic-bezier(0.2, 0.9, 0.25, 1.35) 40ms;
+}
+.menu[data-phase="away"] .hl {
+  opacity: 0;
+  transition: opacity 120ms ease-in;
+}
+.menu[data-phase="away"] .item {
+  opacity: 0;
+  transform: translate(var(--ix), var(--iy)) scale(0.6);
+  transition:
+    transform 190ms var(--ease-in) var(--dc),
+    opacity 160ms ease-in var(--dc),
+    color 150ms ease;
+}
+/* Giữ đĩa và chữ "Đóng" khoảng 1/4 giây rồi mới thu (transition-delay, không cần hẹn giờ). */
+.menu[data-phase="away"] .glass {
+  transform: scale(0.6);
+  transition: transform 200ms var(--ease-in) 260ms;
+}
+.menu[data-phase="away"] .disc {
+  opacity: 0;
+  transition: opacity 180ms ease-in 270ms;
+}
+.menu[data-phase="away"] .hub {
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    transform 180ms var(--ease-in) 280ms,
+    opacity 160ms ease-in 300ms;
+}
+
 /* ---------- Tông sáng ---------- */
 
 .menu[data-tone="light"] {
@@ -566,6 +629,7 @@ body {
   --chip-border: rgba(20, 26, 38, 0.14);
   --label-shadow: 0 1px 2px rgba(255, 255, 255, 0.85), 0 0 10px rgba(255, 255, 255, 0.7);
   --icon-shadow: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.8));
+  --close: #d64545;
 }
 
 /* Tắt làm mờ: không có ảnh nền, đĩa kính đục hơn để chữ vẫn rõ. */

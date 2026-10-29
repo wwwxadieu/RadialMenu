@@ -195,7 +195,7 @@ struct MenuDir {
 
 #[derive(Clone, Serialize)]
 struct MenuClose {
-    /// "pick" = chọn một hướng, "cancel" = huỷ.
+    /// "pick" = chọn một hướng, "cancel" = huỷ, "away" = kéo ra quá xa (giữa menu báo "Đóng").
     mode: &'static str,
     dir: Option<Dir>,
 }
@@ -521,7 +521,7 @@ fn handle_effect(app: &AppHandle, effect: Effect) {
                     );
                 }
             }
-            overlay::hide_later(app);
+            overlay::hide_later(app, overlay::HIDE_DELAY);
         }
         Effect::Away => {
             state.session.lock().unwrap().take();
@@ -529,12 +529,12 @@ fn handle_effect(app: &AppHandle, effect: Effect) {
                 MENU_WINDOW,
                 "menu:close",
                 MenuClose {
-                    mode: "cancel",
+                    mode: "away",
                     dir: None,
                 },
             );
             log(app, LogEvent::Away);
-            overlay::hide_later(app);
+            overlay::hide_later(app, overlay::AWAY_HIDE_DELAY);
         }
         Effect::ReplayClick { .. } => log(app, LogEvent::Native),
         Effect::ReplayDown { .. } => log(app, LogEvent::Handover),

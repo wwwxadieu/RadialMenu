@@ -1,6 +1,6 @@
 [package]
 name = "radial-menu"
-version = "0.1.0"
+version = "0.1.1"
 description = "Menu tròn thay menu chuột phải của Windows"
 authors = ["MrBeoHP"]
 license = "GPL-3.0-only"

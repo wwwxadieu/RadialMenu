@@ -15,6 +15,9 @@ pub const MENU_SIZE: f64 = 520.0;
 pub const DISC_SIZE: f64 = 344.0;
 /// Thời gian chờ animation đóng chạy xong rồi mới ẩn cửa sổ.
 pub const HIDE_DELAY: Duration = Duration::from_millis(360);
+/// Kéo ra quá xa: giữa menu báo "Đóng" một nhịp rồi menu mới thu lại, nên chờ lâu hơn.
+/// Phải dài hơn `AWAY_MS` trong `src/menu/main.ts`.
+pub const AWAY_HIDE_DELAY: Duration = Duration::from_millis(540);
 
 /// Tăng mỗi lần menu mở, để lệnh ẩn cũ không ẩn nhầm menu mới.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -97,11 +100,11 @@ pub fn show(app: &AppHandle, x: i32, y: i32, scale: f64) -> u64 {
 }
 
 /// Ẩn menu sau khi animation đóng chạy xong, trừ khi menu đã được mở lại.
-pub fn hide_later(app: &AppHandle) {
+pub fn hide_later(app: &AppHandle, delay: Duration) {
     let generation = GENERATION.load(Ordering::SeqCst);
     let handle = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(HIDE_DELAY);
+        std::thread::sleep(delay);
         if GENERATION.load(Ordering::SeqCst) != generation {
             return;
         }

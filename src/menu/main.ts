@@ -50,11 +50,16 @@ interface BackdropPayload {
   data: string;
 }
 
-type Phase = "idle" | "pre" | "open" | "pick" | "cancel";
+type Phase = "idle" | "pre" | "open" | "pick" | "cancel" | "away";
+/** Cách menu đóng: chọn một góc, huỷ, hoặc kéo ra quá xa. */
+type CloseMode = "pick" | "cancel" | "away";
 
 const SVG = "http://www.w3.org/2000/svg";
 const SETTLE_MS = 700; // sau mốc này, nút chuyển sang transition nhanh khi đổi hướng
 const CLOSE_MS = 340; // khớp thời lượng animation đóng dài nhất
+// Kéo ra quá xa: giữa menu báo "Đóng" một nhịp rồi mới thu lại.
+// Phải ngắn hơn AWAY_HIDE_DELAY trong overlay.rs.
+const AWAY_MS = 500;
 
 const root = document.getElementById("menu") as HTMLDivElement;
 
@@ -147,6 +152,10 @@ const appProc = el("span", "hub-proc", hubApp);
 const hubAct = el("div", "hub-act", hub);
 const actLabel = el("span", "hub-name", hubAct);
 const actKeys = el("span", "hub-keys", hubAct);
+// Kéo ra quá xa: thay nội dung app bằng dấu X và chữ "Đóng".
+const hubClose = el("div", "hub-close", hub);
+iconSvg(hubClose, 24).setAttribute("d", ICONS.x);
+el("span", "hub-name", hubClose).textContent = "Đóng";
 
 // ---------- Trạng thái ----------
 
@@ -226,9 +235,10 @@ function open(payload: OpenPayload) {
   settleTimer = window.setTimeout(() => (root.dataset.settled = "true"), SETTLE_MS);
 }
 
-function close(mode: "pick" | "cancel", dir: Dir) {
+function close(mode: CloseMode, dir: Dir) {
   window.clearTimeout(settleTimer);
   if (mode === "pick") setDir(dir);
+  else if (mode === "away") setDir(null);
   else root.dataset.dirOff = "false";
   setPhase(mode);
   // Về trạng thái trong suốt trước khi Rust ẩn cửa sổ, để lần hiện sau không lộ khung cũ.
@@ -236,7 +246,7 @@ function close(mode: "pick" | "cancel", dir: Dir) {
     setPhase("idle");
     root.dataset.hasDir = "false";
     items.forEach((item) => item.node.classList.remove("on"));
-  }, CLOSE_MS);
+  }, mode === "away" ? AWAY_MS : CLOSE_MS);
 }
 
 function decode(data: string, width: number, height: number): ImageData | null {
@@ -289,4 +299,4 @@ listen<AppIcon & { seq: number }>("menu:icon", (e) => {
   if (e.payload.seq === currentSeq && root.dataset.phase !== "idle") paintAppIcon(e.payload);
 });
 listen<{ dir: Dir }>("menu:dir", (e) => setDir(e.payload.dir));
-listen<{ mode: "pick" | "cancel"; dir: Dir }>("menu:close", (e) => close(e.payload.mode, e.payload.dir));
+listen<{ mode: CloseMode; dir: Dir }>("menu:close", (e) => close(e.payload.mode, e.payload.dir));
