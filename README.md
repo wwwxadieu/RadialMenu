@@ -31,14 +31,16 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 
 - **Cử chỉ tự nhiên:** nhấn giữ chuột phải, kéo khoảng 10 px là menu mở ngay tại chỗ nhấn. Nhả ở một góc để chạy lệnh, nhả ở giữa để huỷ.
 - **Bộ lệnh theo từng ứng dụng:** tự nhận ra ứng dụng nằm dưới con trỏ, kể cả cửa sổ đang nằm sau. Desktop và cửa sổ File Explorer có bộ lệnh khác nhau dù cùng là `explorer.exe`.
+- **Thư viện lệnh kéo thả:** hơn 60 lệnh soạn sẵn (Sao chép, Dán, Tab mới, Chụp vùng, Phát/Dừng nhạc…). Kéo một lệnh thả vào góc trên hình menu là xong, không cần tự nhập phím tắt.
 - **6 loại hành động:** gửi phím tắt, chạy chương trình, mở URL hoặc thư mục, gõ một đoạn văn bản (có dấu tiếng Việt), chạy chuỗi nhiều bước, mở cài đặt của Radial Menu.
 - **Chọn đúng thứ dưới con trỏ:** với Đổi tên, Xoá, Tới định nghĩa…, app click vào chỗ bạn nhấn trước rồi mới gửi phím, nên lệnh luôn áp vào đúng file hay đúng chữ.
 - **Góc Dán thông minh:** clipboard trống thì góc Dán mờ đi và không chọn được.
 - **Kính mờ thật:** nội dung phía sau menu được làm mờ như tấm kính, cùng hiệu ứng mở và đóng mượt.
 - **Icon thật của ứng dụng** ở giữa menu, để biết chắc mình đang dùng bộ lệnh nào.
-- **Tông sáng/tối, 5 màu nhấn và màu tuỳ chọn, kích thước menu 80–140%.**
+- **Màu theo ý bạn:** tông sáng/tối, 5 màu nhấn có sẵn và bộ chọn màu tự do (kéo chọn, nhập mã HEX hoặc lấy màu ngay trên màn hình). Kích thước menu 80–140%.
 - **Biết lúc nào nên đứng ngoài:** không mở trong game hay video toàn màn hình, trong ứng dụng chạy quyền Admin, hoặc trong các ứng dụng bạn liệt kê. Giữ <kbd>Shift</kbd> khi nhấn là luôn ra menu gốc.
 - **Đổi ý giữa chừng:** kéo vụt ra xa là menu tự đóng, hoặc bấm <kbd>Esc</kbd>.
+- **Hướng dẫn ngay trong app:** mục Hướng dẫn trong cửa sổ cài đặt, có minh hoạ cử chỉ, bảng thao tác, mẹo và cách xử lý khi menu không mở.
 - **Sao lưu một chạm:** xuất toàn bộ cài đặt và bộ lệnh ra một file JSON, nhập lại trên máy khác.
 - **Nhẹ:** viết bằng Rust và Tauri; bộ cài khoảng 1,3 MB.
 
@@ -95,9 +97,11 @@ Có ba cách: bấm icon Radial Menu dưới khay hệ thống, chọn góc **C�
 <img src="docs/images/settings-profile.png" alt="Cửa sổ cài đặt: danh sách bộ lệnh bên trái, hình menu ở giữa, ô sửa góc đang chọn bên phải">
 
 1. Chọn bộ lệnh ở cột bên trái.
-2. Bấm vào một góc trên hình menu (hoặc dùng phím mũi tên).
-3. Đặt tên hiển thị, chọn icon, chọn loại hành động rồi nhập nội dung.
+2. Cách nhanh nhất: mở thẻ **Thư viện lệnh**, kéo một lệnh có sẵn và thả vào một góc trên hình menu. Bấm vào một lệnh thì lệnh đó được gán cho góc đang chọn.
+3. Muốn tự đặt lệnh: bấm vào một góc trên hình menu (hoặc dùng phím mũi tên), đặt tên hiển thị, chọn icon, chọn loại hành động rồi nhập nội dung.
 4. Bấm **Lưu** (hoặc <kbd>Ctrl</kbd>+<kbd>S</kbd>). Lỗi nào cũng được báo rõ ở góc nào; bấm **Huỷ thay đổi** để quay lại.
+
+<img src="docs/images/settings-library.png" alt="Thư viện lệnh: đang kéo lệnh Đánh dấu trang thả vào góc Tây Bắc của bộ Trình duyệt">
 
 | Loại hành động | Bạn nhập | Ví dụ |
 | --- | --- | --- |
@@ -137,9 +141,15 @@ Một bộ lệnh có thể áp dụng cho nhiều chương trình cùng lúc. B
 
 ### Giao diện
 
-<img src="docs/images/settings-appearance-light.png" alt="Trang Giao diện tông sáng: tông màu, màu nhấn, kích thước menu, hiệu ứng, làm mờ nền">
+<img src="docs/images/settings-appearance-light.png" alt="Trang Giao diện tông sáng với bộ chọn màu đang mở: ô chọn độ đậm và độ sáng, thanh sắc màu, ô mã HEX">
 
-Chọn tông tối hoặc sáng, màu nhấn và kích thước menu. Hiệu ứng chuyển động có thể theo cài đặt của Windows, luôn bật hoặc tắt hẳn. Máy yếu thì tắt **Làm mờ nội dung phía sau menu**. Tắt **Ẩn menu khỏi ảnh chụp màn hình** nếu bạn cần chụp hoặc quay lại menu.
+Chọn tông tối hoặc sáng, màu nhấn và kích thước menu. Ngoài 5 màu có sẵn, bấm ô cầu vồng để mở bộ chọn màu: kéo trong ô màu và thanh sắc màu, gõ mã HEX, hoặc bấm biểu tượng ống hút để lấy một màu bất kỳ trên màn hình. Màu đổi ngay khi bạn kéo. Hiệu ứng chuyển động có thể theo cài đặt của Windows, luôn bật hoặc tắt hẳn. Máy yếu thì tắt **Làm mờ nội dung phía sau menu**. Tắt **Ẩn menu khỏi ảnh chụp màn hình** nếu bạn cần chụp hoặc quay lại menu.
+
+### Hướng dẫn trong app
+
+<img src="docs/images/settings-guide.png" alt="Trang Hướng dẫn: ba bước dùng menu kèm hình minh hoạ cử chỉ, bảng thao tác">
+
+Mục **Hướng dẫn** ở cuối cột bên trái tóm tắt cách dùng: ba bước mở menu có hình minh hoạ chạy thử, bảng thao tác, cách đổi lệnh, mẹo dùng nhanh và cách xử lý khi menu không mở.
 
 ### Nhật ký, sao lưu và khay hệ thống
 

@@ -8,6 +8,7 @@ import { dropdown } from "./controls";
 import { h, icon, toggle } from "./dom";
 import { isDirty, makeDraft, ProfileEditor, type Draft } from "./editor";
 import { dialog, toast } from "./overlay";
+import { guidePage } from "./guide";
 import { appearancePage, backupPage, behaviorPage, describeEvent, logPage, type LogEntry, type PageHost } from "./pages";
 import "./style.css";
 
@@ -17,13 +18,15 @@ type Page =
   | { kind: "behavior" }
   | { kind: "appearance" }
   | { kind: "log" }
-  | { kind: "backup" };
+  | { kind: "backup" }
+  | { kind: "guide" };
 
 const GENERAL: ReadonlyArray<{ kind: Exclude<Page["kind"], "profile" | "new">; label: string; icon: string }> = [
   { kind: "behavior", label: "Cử chỉ & khởi động", icon: "mouse" },
   { kind: "appearance", label: "Giao diện", icon: "sun" },
   { kind: "log", label: "Nhật ký", icon: "format" },
   { kind: "backup", label: "Sao lưu & khôi phục", icon: "save" },
+  { kind: "guide", label: "Hướng dẫn", icon: "book" },
 ];
 
 const side = document.getElementById("side") as HTMLElement;
@@ -230,6 +233,11 @@ const pageHost: PageHost = {
     render();
   },
   rerender: () => render(),
+  go: (target) => {
+    if (target === "add-app") void addAppDialog();
+    else if (target === "default") void navigate({ kind: "profile", id: "default" });
+    else void navigate({ kind: target });
+  },
 };
 
 function render() {
@@ -279,6 +287,8 @@ function render() {
   } else if (page.kind === "log") {
     logView = logPage(pageHost, logEntries, () => (logEntries.length = 0));
     content = logView.el;
+  } else if (page.kind === "guide") {
+    content = guidePage(pageHost);
   } else {
     content = backupPage(pageHost);
   }

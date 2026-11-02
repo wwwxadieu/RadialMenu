@@ -4,7 +4,7 @@ import { h, icon, nextId } from "./dom";
 
 // ---------- Khung nổi dùng chung ----------
 
-interface Popover {
+export interface Popover {
   el: HTMLDivElement;
   close(): void;
 }
@@ -14,7 +14,7 @@ interface Popover {
  * thoại (phần ngoài hộp thoại modal không bấm được). Tự đóng khi bấm ra ngoài,
  * cuộn trang hoặc đổi kích thước cửa sổ.
  */
-function openPopover(anchor: HTMLElement, cls: string, onClose: () => void): Popover {
+export function openPopover(anchor: HTMLElement, cls: string, onClose: () => void): Popover {
   const host = anchor.closest("dialog") ?? document.body;
   const el = h("div", { class: `pop ${cls}` });
   host.append(el);
@@ -47,7 +47,7 @@ function openPopover(anchor: HTMLElement, cls: string, onClose: () => void): Pop
 }
 
 /** Đặt khung nổi ngay dưới (hoặc trên, nếu thiếu chỗ) phần tử neo. */
-function place(pop: HTMLElement, anchor: HTMLElement, minWidth = 0) {
+export function place(pop: HTMLElement, anchor: HTMLElement, minWidth = 0) {
   const r = anchor.getBoundingClientRect();
   const width = Math.max(r.width, minWidth);
   pop.style.minWidth = `${width}px`;

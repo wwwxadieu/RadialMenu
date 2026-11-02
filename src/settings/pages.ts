@@ -1,9 +1,11 @@
-// Các trang chung: Cử chỉ & khởi động, Giao diện, Nhật ký, Sao lưu & khôi phục.
+// Các trang chung: Cử chỉ & khởi động, Giao diện, Nhật ký, Sao lưu & khôi phục
+// (trang Hướng dẫn nằm trong guide.ts).
 // Cài đặt ở đây lưu ngay khi đổi (không cần bấm Lưu).
 import { DIRS } from "../shared/geometry";
 import type { AppState, GestureEvent, Settings } from "../shared/types";
 import { api, errorText } from "./api";
 import { chip, chipAdder, h, icon, segmented, toggle } from "./dom";
+import { openColorPicker } from "./colorpicker";
 import { confirmDialog, dialog, toast } from "./overlay";
 import { RadialPreview } from "./preview";
 
@@ -16,13 +18,17 @@ export interface PageHost {
   refresh(): Promise<void>;
   /** Vẽ lại trang hiện tại từ dữ liệu đang có. */
   rerender(): void;
+  /** Chuyển tới một trang khác (dùng cho liên kết trong trang Hướng dẫn). */
+  go(target: GoTarget): void;
 }
 
-function card(title: string, ...children: (Node | null)[]): HTMLElement {
+export type GoTarget = "behavior" | "appearance" | "log" | "backup" | "default" | "add-app";
+
+export function card(title: string, ...children: (Node | null)[]): HTMLElement {
   return h("section", { class: "card" }, h("h2", { class: "card-title" }, title), ...children);
 }
 
-function pageHead(title: string, sub: string): HTMLElement {
+export function pageHead(title: string, sub: string): HTMLElement {
   return h("header", { class: "page-head" }, h("h1", null, title), h("p", { class: "sub" }, sub));
 }
 
@@ -183,23 +189,37 @@ export function appearancePage(host: PageHost): HTMLElement {
   }, 1400);
 
   const swatches = h("div", { class: "swatches", role: "radiogroup", "aria-label": "Màu nhấn" });
+  const accentCode = h("span", { class: "accent-code mono" });
   const drawSwatches = () => {
     const current = host.app().settings.accent.toUpperCase();
     const isCustom = !app.accents.includes(current);
-    swatches.replaceChildren(
-      ...app.accents.map((hex) => {
-        const b = h("button", { type: "button", class: "swatch", role: "radio", "aria-checked": String(hex === current), "aria-label": `Màu ${hex}`, style: `--sw: ${hex}` });
-        b.addEventListener("click", () => {
-          host.updateSettings({ accent: hex });
-          drawSwatches();
-        });
-        return b;
+    const swatch = (hex: string, title: string) => {
+      const b = h("button", { type: "button", class: "swatch", role: "radio", "aria-checked": String(hex === current), "aria-label": title, title, style: `--sw: ${hex}` });
+      b.addEventListener("click", () => {
+        host.updateSettings({ accent: hex });
+        drawSwatches();
+      });
+      return b;
+    };
+    // Màu tự chọn đang dùng: một ô riêng ngay sau các màu có sẵn.
+    const custom = isCustom ? swatch(current, `Màu tự chọn ${current}`) : null;
+    const more = h(
+      "button",
+      { type: "button", class: "swatch more", title: "Chọn màu khác", "aria-label": "Chọn màu khác", "aria-haspopup": "dialog", "aria-expanded": "false" },
+      icon("plus", 14),
+    );
+    more.addEventListener("click", () =>
+      openColorPicker(more, {
+        value: host.app().settings.accent,
+        onInput: (hex) => {
+          host.updateSettings({ accent: hex }, 250);
+          accentCode.textContent = hex;
+        },
+        onClose: () => drawSwatches(),
       }),
     );
-    const picker = h("input", { type: "color", value: current.toLowerCase(), "aria-label": "Màu tuỳ chọn" });
-    picker.addEventListener("input", () => host.updateSettings({ accent: picker.value.toUpperCase() }, 200));
-    picker.addEventListener("change", drawSwatches);
-    swatches.append(h("label", { class: `swatch custom${isCustom ? " on" : ""}`, title: "Màu khác" }, picker, icon("plus", 14)));
+    swatches.replaceChildren(...app.accents.map((hex) => swatch(hex, `Màu ${hex}`)), ...(custom ? [custom] : []), more);
+    accentCode.textContent = current;
   };
   drawSwatches();
 
@@ -215,7 +235,7 @@ export function appearancePage(host: PageHost): HTMLElement {
         "section",
         { class: "card stack-lg" },
         segmented("tone", "Tông màu", [["dark", "Tối"], ["light", "Sáng"]] as const, s.tone, (v) => host.updateSettings({ tone: v })),
-        h("div", { class: "field" }, h("span", { class: "field-label" }, "Màu nhấn"), swatches),
+        h("div", { class: "field" }, h("div", { class: "field-top" }, h("span", { class: "field-label" }, "Màu nhấn"), accentCode), swatches),
         slider(
           "Kích thước menu",
           Math.round(s.menuScale * 100),

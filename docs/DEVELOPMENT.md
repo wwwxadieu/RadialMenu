@@ -71,6 +71,11 @@ src-tauri/src/
   hook/win.rs    WH_MOUSE_LL + WH_KEYBOARD_LL, phát lại right-click
 src/menu/        menu tròn (TypeScript thuần + CSS transition)
 src/settings/    cửa sổ cài đặt (TypeScript thuần, không framework)
+  editor.ts      trang sửa profile: hình menu, thẻ Sửa góc / Thư viện lệnh
+  library.ts     thư viện lệnh soạn sẵn, kéo thả bằng sự kiện con trỏ
+  colorpicker.ts bộ chọn màu nhấn (ô màu, thanh sắc màu, mã HEX, ống hút)
+  guide.ts       trang Hướng dẫn
+  pages.ts       các trang chung: Cử chỉ, Giao diện, Nhật ký, Sao lưu
 src/shared/      icon, logo (logo.svg), hình học menu, tên phím, kiểu dữ liệu dùng chung
 scripts/make-icons.cjs        sinh icon app từ src/shared/logo.svg
 src-tauri/installer-hooks.nsh bước thêm khi gỡ cài đặt (xoá mục chạy cùng Windows)

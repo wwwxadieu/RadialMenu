@@ -5,7 +5,8 @@ import type { AppState, DirId, Profile, Slot } from "../shared/types";
 import { actionFields, defaultAction, groupName, isPaste, TOP_TYPES, type ActionHost } from "./action-fields";
 import { checkbox } from "./controls";
 import { chip, chipAdder, h, icon, segmented, toggle } from "./dom";
-import { iconPicker } from "./overlay";
+import { libraryPanel, type Preset } from "./library";
+import { iconPicker, toast } from "./overlay";
 import { RadialPreview } from "./preview";
 
 export interface Draft {
@@ -38,10 +39,17 @@ export function makeDraft(profile: Profile, isNew = false): Draft {
 
 const slotAt = (p: Profile, i: number) => p.slots.find((s) => s.dir === DIRS[i].id) ?? null;
 
+/** Bảng bên phải: sửa góc đang chọn, hoặc thư viện lệnh để kéo thả. Giữ qua các lần vẽ lại. */
+let panel: "slot" | "library" = "slot";
+
 export class ProfileEditor {
   readonly el: HTMLElement;
   private preview: RadialPreview;
-  private slotBox = h("section", { class: "card slot-card", "aria-labelledby": "slot-title" });
+  private slotBox = h("section", { class: "card slot-card" });
+  private slotBody = h("div", { class: "slot-body", role: "tabpanel" });
+  private tabs = h("div", { class: "panel-tabs", role: "tablist", "aria-label": "Bảng bên phải" });
+  private note = h("p", { class: "card-note" });
+  private library: ReturnType<typeof libraryPanel> | null = null;
   private headBox = h("section", { class: "card head-card", "aria-label": "Thông tin profile" });
   /** Hiện ô thêm lớp cửa sổ (tuỳ chọn nâng cao). */
   private advanced = false;
@@ -53,19 +61,88 @@ export class ProfileEditor {
       onPick: (i) => {
         this.draft.selected = i;
         this.preview.update(this.draft.profile, i);
-        this.renderSlot();
+        // Bấm vào một góc = muốn sửa góc đó.
+        panel = "slot";
+        this.renderPanel();
       },
     });
-    const previewCard = h(
-      "section",
-      { class: "card preview-card", "aria-label": "Xem trước menu" },
-      h("p", { class: "card-note" }, "Bấm vào một góc để sửa lệnh của góc đó"),
-      this.preview.el,
-    );
+    const previewCard = h("section", { class: "card preview-card", "aria-label": "Xem trước menu" }, this.note, this.preview.el);
+    this.slotBox.append(this.tabs, this.slotBody);
     this.el = h("div", { class: "page profile-page" }, this.headBox, h("div", { class: "editor-grid" }, previewCard, this.slotBox));
     this.renderHead();
-    this.renderSlot();
+    this.renderPanel();
     this.preview.update(draft.profile, draft.selected);
+  }
+
+  // ---------- Bảng bên phải: Sửa góc / Thư viện lệnh ----------
+
+  private renderPanel() {
+    const tab = (id: typeof panel, ico: string, label: string) =>
+      h(
+        "button",
+        {
+          type: "button",
+          role: "tab",
+          class: "panel-tab",
+          "aria-selected": String(panel === id),
+          tabindex: panel === id ? "0" : "-1",
+          onclick: () => {
+            if (panel === id) return;
+            panel = id;
+            this.renderPanel();
+          },
+        },
+        icon(ico, 16),
+        label,
+      );
+    this.tabs.replaceChildren(tab("slot", "pencil", "Sửa góc"), tab("library", "grid", "Thư viện lệnh"));
+    // Mũi tên trái/phải chuyển giữa hai thẻ.
+    this.tabs.onkeydown = (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      panel = panel === "slot" ? "library" : "slot";
+      this.renderPanel();
+      (this.tabs.querySelector('[aria-selected="true"]') as HTMLElement | null)?.focus();
+    };
+    this.note.textContent = panel === "library" ? "Thả lệnh vào một góc để gán cho góc đó" : "Bấm vào một góc để sửa lệnh của góc đó";
+    if (panel === "library") {
+      this.library = libraryPanel({
+        selected: () => this.draft.selected,
+        dirName: (i) => DIRS[i].name,
+        dirAt: (x, y) => this.preview.dirAt(x, y),
+        hover: (i) => this.preview.setDrop(i),
+        assign: (i, preset) => this.assign(i, preset),
+      });
+      this.slotBody.replaceChildren(this.library.el);
+    } else {
+      this.library = null;
+      this.renderSlot();
+    }
+  }
+
+  /** Gán một lệnh trong thư viện vào góc `i` (thay lệnh cũ nếu có). */
+  private assign(i: number, preset: Preset) {
+    const p = this.draft.profile;
+    const dir = DIRS[i].id as DirId;
+    const slot: Slot = { dir, label: preset.label, icon: preset.icon, action: structuredClone(preset.action) };
+    if (preset.clickFirst) slot.clickFirst = true;
+    const at = p.slots.findIndex((s) => s.dir === dir);
+    const replaced = at >= 0 ? p.slots[at].label : null;
+    if (at >= 0) p.slots[at] = slot;
+    else {
+      p.slots.push(slot);
+      p.slots.sort((a, b) => DIRS.findIndex((x) => x.id === a.dir) - DIRS.findIndex((x) => x.id === b.dir));
+    }
+    this.draft.selected = i;
+    this.touched();
+    this.preview.flash(i);
+    this.library?.refresh();
+    toast(
+      replaced && replaced !== preset.label
+        ? `Góc ${DIRS[i].name}: “${replaced}” → “${preset.label}”. Bấm Lưu để giữ.`
+        : `Đã gán “${preset.label}” vào góc ${DIRS[i].name}. Bấm Lưu để giữ.`,
+      "info",
+    );
   }
 
   /** Bản nháp đổi: vẽ lại phần xem trước và báo ra ngoài. */
@@ -209,7 +286,7 @@ export class ProfileEditor {
     const head = h("div", { class: "slot-head" }, h("span", { class: "eyebrow" }, `GÓC ${d.name.toUpperCase()} ${d.arrow}`), title);
 
     if (!slot) {
-      this.slotBox.replaceChildren(
+      this.slotBody.replaceChildren(
         head,
         h("p", { class: "muted" }, "Nhả chuột ở góc này sẽ không làm gì."),
         h("button", {
@@ -220,9 +297,17 @@ export class ProfileEditor {
             p.slots.sort((a, b) => DIRS.findIndex((x) => x.id === a.dir) - DIRS.findIndex((x) => x.id === b.dir));
             this.touched();
             this.renderSlot();
-            (this.slotBox.querySelector(".label-input") as HTMLInputElement | null)?.focus();
+            (this.slotBody.querySelector(".label-input") as HTMLInputElement | null)?.focus();
           },
-        }, icon("plus", 16), "Thêm lệnh cho góc này"),
+        }, icon("plus", 16), "Tự đặt lệnh cho góc này"),
+        h("button", {
+          type: "button",
+          class: "btn ghost",
+          onclick: () => {
+            panel = "library";
+            this.renderPanel();
+          },
+        }, icon("grid", 16), "Chọn từ thư viện lệnh"),
       );
       return;
     }
@@ -277,7 +362,7 @@ export class ProfileEditor {
       },
     );
 
-    this.slotBox.replaceChildren(
+    this.slotBody.replaceChildren(
       head,
       h("div", { class: "field" }, h("label", { for: "slot-label" }, "Tên hiển thị"), h("div", { class: "label-row" }, iconBtn, label)),
       types,
@@ -303,6 +388,7 @@ export class ProfileEditor {
   selectDir(i: number) {
     this.draft.selected = i;
     this.preview.update(this.draft.profile, i);
-    this.renderSlot();
+    panel = "slot";
+    this.renderPanel();
   }
 }

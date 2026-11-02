@@ -111,6 +111,36 @@ export class RadialPreview {
     this.hubSub.textContent = profile.match.process[0] ?? (profile.id === "default" ? "mọi app khác" : "");
   }
 
+  /** Góc nằm dưới điểm (clientX, clientY), tính theo hình học của đĩa; ngoài đĩa hoặc trong tâm = null. */
+  dirAt(x: number, y: number): number | null {
+    const r = this.el.getBoundingClientRect();
+    if (!r.width) return null;
+    const unit = r.width / STAGE;
+    const dx = (x - (r.left + r.width / 2)) / unit;
+    const dy = (y - (r.top + r.height / 2)) / unit;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 56 || dist > 190) return null;
+    const deg = (Math.atan2(dy, dx) * 180) / Math.PI + 90; // 0 = Bắc, theo chiều kim đồng hồ
+    return ((Math.round(deg / 45) % 8) + 8) % 8;
+  }
+
+  /** Tô sáng góc sắp được thả lệnh vào (kéo từ Thư viện lệnh). */
+  setDrop(i: number | null) {
+    this.el.classList.toggle("dropping", i !== null);
+    this.wedges.forEach((w, j) => w.classList.toggle("drop", j === i));
+    this.items.forEach((it, j) => it.box.classList.toggle("drop", j === i));
+  }
+
+  /** Nháy nhẹ một góc vừa được gán lệnh. */
+  flash(i: number) {
+    const w = this.wedges[i];
+    if (!w) return;
+    w.classList.remove("flash");
+    void w.getBoundingClientRect();
+    w.classList.add("flash");
+    window.setTimeout(() => w.classList.remove("flash"), 700);
+  }
+
   focusDir(i: number) {
     this.wedges[i]?.focus();
   }
