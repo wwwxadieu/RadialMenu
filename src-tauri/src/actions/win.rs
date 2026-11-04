@@ -10,7 +10,7 @@ use windows::Win32::System::Com::{
     COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
 };
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
-use windows::Win32::System::Variant::{VARIANT, VT_I4};
+use windows::Win32::System::Variant::{VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_I4};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     MapVirtualKeyW, SendInput, VkKeyScanW, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT,
     KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MAPVK_VK_TO_VSC,
@@ -264,12 +264,17 @@ fn wide(s: &str) -> Vec<u16> {
 
 /// VARIANT kiểu số nguyên 32 bit (tham số của IShellWindows).
 fn variant_i4(value: i32) -> VARIANT {
-    let mut v = VARIANT::default();
-    unsafe {
-        v.Anonymous.Anonymous.vt = VT_I4;
-        v.Anonymous.Anonymous.Anonymous.lVal = value;
+    VARIANT {
+        Anonymous: VARIANT_0 {
+            Anonymous: core::mem::ManuallyDrop::new(VARIANT_0_0 {
+                vt: VT_I4,
+                wReserved1: 0,
+                wReserved2: 0,
+                wReserved3: 0,
+                Anonymous: VARIANT_0_0_0 { lVal: value },
+            }),
+        },
     }
-    v
 }
 
 fn class_of(hwnd: HWND) -> String {

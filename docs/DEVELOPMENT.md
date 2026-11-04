@@ -130,6 +130,7 @@ Mỗi góc trong profile:
 | `sequence` | `steps` | danh sách các hành động trên, chạy lần lượt |
 | `wait` | `ms` | chỉ dùng trong `sequence`, tối đa 5000 |
 | `settings` | (không có) | mở cửa sổ cài đặt; không dùng trong `sequence` |
+| `openWith` | `app` (bỏ trống = hộp thoại Open with) | mở file đang chọn trong File Explorer/Desktop; đọc vùng chọn qua `IShellWindows` → `IFolderView`; không dùng trong `sequence` |
 | `submenu` | `slots` | danh sách góc như của profile, không lồng thêm `submenu`; không dùng trong `sequence` |
 
 Tuỳ chọn thêm cho mỗi góc:

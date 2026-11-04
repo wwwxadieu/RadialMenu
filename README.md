@@ -33,7 +33,8 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 - **Bộ lệnh theo từng ứng dụng:** tự nhận ra ứng dụng nằm dưới con trỏ, kể cả cửa sổ đang nằm sau. Desktop và cửa sổ File Explorer có bộ lệnh khác nhau dù cùng là `explorer.exe`.
 - **Thư viện lệnh kéo thả:** hơn 60 lệnh soạn sẵn (Sao chép, Dán, Tab mới, Chụp vùng, Phát/Dừng nhạc…). Kéo một lệnh thả vào góc trên hình menu là xong, không cần tự nhập phím tắt.
 - **Menu con, nhiều hơn 8 lệnh:** một góc có thể là menu con chứa thêm 8 lệnh. Kéo vụt qua mép menu ở góc đó là vòng lệnh đổi sang menu con ngay tại chỗ; hoặc nhả chuột ở góc đó rồi di chuột và bấm chọn.
-- **7 loại hành động:** gửi phím tắt, chạy chương trình, mở URL hoặc thư mục, gõ một đoạn văn bản (có dấu tiếng Việt), chạy chuỗi nhiều bước, mở cài đặt của Radial Menu, menu con.
+- **8 loại hành động:** gửi phím tắt, chạy chương trình, mở URL hoặc thư mục, gõ một đoạn văn bản (có dấu tiếng Việt), chạy chuỗi nhiều bước, mở cài đặt của Radial Menu, mở file bằng app khác, menu con.
+- **Mở bằng (Open with):** mở file đang chọn trong File Explorer hoặc trên Desktop bằng app bạn chỉ định (VS Code, Notepad, Photoshop…), hoặc hiện hộp thoại "Open with" của Windows. Thư viện có sẵn menu con "Mở bằng".
 - **Chọn đúng thứ dưới con trỏ:** với Đổi tên, Xoá, Tới định nghĩa…, app click vào chỗ bạn nhấn trước rồi mới gửi phím, nên lệnh luôn áp vào đúng file hay đúng chữ.
 - **Góc Dán thông minh:** clipboard trống thì góc Dán mờ đi và không chọn được.
 - **Kính mờ thật:** nội dung phía sau menu được làm mờ như tấm kính, cùng hiệu ứng mở và đóng mượt.
@@ -119,6 +120,7 @@ Có ba cách: bấm icon Radial Menu dưới khay hệ thống, chọn góc **C�
 | **Gõ văn bản** | Đoạn chữ sẽ được gõ vào (có xuống dòng, có dấu) | Trân trọng, … |
 | **Chuỗi bước** | Nhiều bước chạy lần lượt: phím tắt, gõ chữ, chờ, chạy lệnh, mở URL | Alt+D → gõ `wt -d .` → Enter |
 | **Mở cài đặt** | Không cần nhập gì | Mở cửa sổ cài đặt này |
+| **Mở bằng** | Chương trình (tên như `notepad.exe`, `code` hoặc đường dẫn .exe), hoặc chọn "Hỏi mỗi lần" để hiện hộp thoại Open with | Mở file đang chọn bằng VS Code |
 | **Menu con** | Bấm **Mở menu con để sửa**, rồi đặt tối đa 8 lệnh như một vòng menu bình thường | Góc "Cửa sổ" chứa Phóng to, Thu nhỏ, Xếp trái, Xếp phải |
 
 Mỗi góc còn có hai tuỳ chọn:

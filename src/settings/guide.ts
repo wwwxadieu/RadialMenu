@@ -155,6 +155,12 @@ export function guidePage(host: PageHost): HTMLElement {
           "đổi loại của một góc thành Menu con. Khi dùng, kéo vụt qua mép menu ở góc có dấu › là vòng lệnh đổi sang menu con; hoặc nhả chuột ở góc đó rồi bấm chọn.",
         ),
         h("li", null, h("b", null, "Lệnh cần chọn đúng thứ dưới con trỏ "), "(Đổi tên, Xoá…): bật “Click vào chỗ vừa nhấn trước khi chạy” cho góc đó."),
+        h(
+          "li",
+          null,
+          h("b", null, "Mở file bằng app khác: "),
+          "kéo menu con “Mở bằng” từ Thư viện lệnh vào bộ File Explorer, rồi kéo menu trên một file để mở nó bằng VS Code, Notepad, Paint hoặc app bất kỳ.",
+        ),
         h("li", null, h("b", null, "Tạm tắt menu tròn: "), "gạt “Bật menu” ở góc dưới bên trái, hoặc chuột phải vào icon Radial Menu dưới khay hệ thống."),
         h("li", null, h("b", null, "Đổi màu, tông sáng tối và kích thước menu "), "trong ", link("Giao diện", "appearance"), "."),
       ),
