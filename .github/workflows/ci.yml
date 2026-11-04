@@ -1,0 +1,33 @@
+# Kiểm tra mỗi lần đẩy code lên main: kiểu TypeScript, build giao diện, test Rust.
+name: Kiểm tra
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cài gói npm
+        run: npm ci
+
+      - name: Kiểm tra kiểu và build giao diện
+        run: npm run build
+
+      - name: Test Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml

@@ -15,3 +15,10 @@ logs/
 
 # Thư mục tạm khi chép mã sang máy
 _to_delete/
+
+# Khoá ký bản cập nhật: tuyệt đối không đưa lên GitHub
+.keys/
+*.key
+
+# File phát hành tạo trong GitHub Actions
+release/
