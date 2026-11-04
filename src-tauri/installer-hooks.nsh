@@ -2,6 +2,10 @@
 ; (bundle > windows > nsis > installerHooks).
 
 ; On uninstall, also remove the "launch at login" entry the app wrote to the user's Run key.
+; Skipped when the uninstaller runs as part of an update (/UPDATE): the setting must survive,
+; and the app writes the entry again on its next start anyway.
 !macro NSIS_HOOK_POSTUNINSTALL
-  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Radial Menu"
+  ${If} $UpdateMode <> 1
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Radial Menu"
+  ${EndIf}
 !macroend

@@ -266,6 +266,21 @@ kbd {
   border: 1px solid rgba(229, 72, 77, 0.4);
   color: var(--danger);
 }
+.banner.info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  color: var(--ink);
+}
+.banner.info .ico {
+  color: var(--accent-text);
+}
+.banner.info .link-btn {
+  font-size: inherit;
+  font-weight: 600;
+}
 .banner.warn {
   background: rgba(255, 198, 109, 0.12);
   border: 1px solid rgba(255, 198, 109, 0.4);
@@ -472,10 +487,117 @@ hr.sep {
 .side-switch .switch-label {
   font-size: 13px;
 }
-.version {
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 0 4px;
+  white-space: nowrap;
+}
+.version {
   font-size: 11.5px;
   color: var(--faint);
+}
+.version-check {
+  font-size: 11.5px;
+  color: var(--sub);
+}
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Hộp thoại cập nhật */
+.update-dialog {
+  width: min(520px, 92vw);
+}
+.update-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 4px;
+}
+.update-meta {
+  margin: 0;
+  color: var(--sub);
+  font-size: 13px;
+}
+.update-notes {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--field);
+  border: 1px solid var(--line-soft);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.update-notes h3 {
+  margin: 10px 0 4px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.update-notes h3:first-child {
+  margin-top: 0;
+}
+.update-notes p {
+  margin: 0 0 6px;
+}
+.update-notes ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+.update-status {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.update-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(229, 72, 77, 0.12);
+  color: var(--danger);
+  font-size: 13px;
+}
+.update-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--field);
+  border: 1px solid var(--line-soft);
+  overflow: hidden;
+}
+.update-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+.update-bar.indeterminate span {
+  animation: update-slide 1.2s ease-in-out infinite;
+}
+@keyframes update-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
 }
 
 /* ---------- Ô nhập ---------- */
@@ -1500,6 +1622,101 @@ textarea.input {
   width: 32px;
   height: 32px;
   border-radius: 8px;
+}
+
+/* ---------- Menu con trong trình sửa profile ---------- */
+
+.r-item.has-sub .r-label::after {
+  content: " ›";
+  font-weight: 700;
+}
+.card-note.crumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-self: stretch;
+}
+.crumb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.crumb-back:hover {
+  border-color: var(--accent);
+}
+.crumb-sep {
+  color: var(--faint);
+}
+.crumb-here {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.crumb-here .ico {
+  color: var(--accent-text);
+}
+.submenu-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.submenu-box .btn {
+  align-self: flex-start;
+}
+.sub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.sub-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--field);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.sub-cell:hover {
+  border-color: var(--accent);
+}
+.sub-cell .ico {
+  color: var(--accent-text);
+}
+.sub-cell.empty {
+  border-style: dashed;
+  color: var(--faint);
+}
+.sub-arrow {
+  flex: none;
+  width: 16px;
+  color: var(--faint);
+  font-size: 13px;
+  text-align: center;
+}
+.sub-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- Bảng bên phải của trình sửa profile: Sửa góc / Thư viện lệnh ---------- */

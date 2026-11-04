@@ -79,7 +79,8 @@ export class RadialPreview {
     this.el.append(h("div", { class: "radial-glass", "aria-hidden": "true" }), svg);
   }
 
-  update(profile: Profile, selected: number | null) {
+  /** `subtitle` thay dòng nhỏ giữa menu (ví dụ "menu con" khi đang sửa menu con). */
+  update(profile: Profile, selected: number | null, subtitle?: string) {
     this.selected = selected;
     const slots: (Profile["slots"][number] | null)[] = Array(8).fill(null);
     for (const s of profile.slots) {
@@ -91,6 +92,7 @@ export class RadialPreview {
       const on = i === selected;
       item.box.classList.toggle("empty", !slot);
       item.box.classList.toggle("on", on);
+      item.box.classList.toggle("has-sub", slot?.action.type === "submenu");
       item.icon.setAttribute("d", slot ? (ICONS[slot.icon] ?? ICONS.smile) : ICONS.plus);
       item.label.textContent = slot ? slot.label || "Chưa đặt tên" : "Trống";
       const w = this.wedges[i];
@@ -108,7 +110,7 @@ export class RadialPreview {
 
     this.hubIcon.setAttribute("d", ICONS[profile.icon] ?? ICONS.grid);
     this.hubName.textContent = profile.name || "Chưa đặt tên";
-    this.hubSub.textContent = profile.match.process[0] ?? (profile.id === "default" ? "mọi app khác" : "");
+    this.hubSub.textContent = subtitle ?? profile.match.process[0] ?? (profile.id === "default" ? "mọi app khác" : "");
   }
 
   /** Góc nằm dưới điểm (clientX, clientY), tính theo hình học của đĩa; ngoài đĩa hoặc trong tâm = null. */

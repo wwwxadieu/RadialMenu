@@ -1,6 +1,6 @@
 // Gọi lõi Rust (commands.rs).
 import { invoke } from "@tauri-apps/api/core";
-import type { AppInfo, AppState, Profile, Settings } from "../shared/types";
+import type { AppInfo, AppState, Profile, Settings, UpdateInfo } from "../shared/types";
 
 export const api = {
   state: () => invoke<AppState>("get_state"),
@@ -14,6 +14,8 @@ export const api = {
   setPaused: (paused: boolean) => invoke<boolean>("set_paused", { paused }),
   reload: () => invoke<void>("reload_config"),
   openConfigDir: () => invoke<void>("open_config_dir"),
+  checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
+  installUpdate: () => invoke<void>("install_update"),
 };
 
 /** Lỗi từ Rust là chuỗi; lỗi khác thì lấy message. */

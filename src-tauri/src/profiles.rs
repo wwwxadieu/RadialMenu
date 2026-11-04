@@ -56,6 +56,9 @@ pub enum Action {
     Wait { ms: u64 },
     /// Mở cửa sổ cài đặt của Radial Menu.
     Settings,
+    /// Menu con: thêm tối đa 8 lệnh nữa, mở bằng cách kéo qua mép menu ở góc này
+    /// hoặc nhả chuột ở góc này rồi bấm chọn. Không lồng thêm menu con bên trong.
+    Submenu { slots: Vec<Slot> },
 }
 
 impl Action {
@@ -93,6 +96,7 @@ impl Action {
                 .join(" → "),
             Action::Wait { ms } => format!("chờ {ms} ms"),
             Action::Settings => "mở cài đặt".into(),
+            Action::Submenu { slots } => format!("{} lệnh ›", slots.len()),
         }
     }
 
@@ -121,7 +125,8 @@ impl Action {
             Action::Command { .. }
             | Action::Url { .. }
             | Action::Wait { .. }
-            | Action::Settings => false,
+            | Action::Settings
+            | Action::Submenu { .. } => false,
         }
     }
 }
@@ -240,8 +245,39 @@ pub fn is_valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
+/// Kiểm tra các góc của một vòng menu (vòng chính hoặc menu con), chuẩn hoá tên và
+/// sắp theo hướng. `prefix` thêm vào trước tên góc trong lời báo lỗi.
+fn validate_slots(slots: &mut [Slot], in_submenu: bool, prefix: &str) -> Result<(), String> {
+    let mut seen = [false; 8];
+    for slot in slots.iter_mut() {
+        let i = slot.dir.index();
+        let name = DIR_NAMES[i];
+        if std::mem::replace(&mut seen[i], true) {
+            return Err(format!("{prefix}Có hai góc cùng hướng {name}"));
+        }
+        slot.label = slot.label.trim().to_string();
+        if slot.label.is_empty() {
+            return Err(format!("{prefix}Góc {name}: cần tên hiển thị"));
+        }
+        if let Action::Submenu { slots: children } = &mut slot.action {
+            if in_submenu {
+                return Err(format!("{prefix}Góc {name}: menu con không được lồng nhau"));
+            }
+            if children.is_empty() {
+                return Err(format!("Góc {name}: menu con chưa có lệnh nào"));
+            }
+            validate_slots(children, true, &format!("Góc {name}, menu con: "))?;
+        } else {
+            validate_action(&slot.action, 0).map_err(|e| format!("{prefix}Góc {name}: {e}"))?;
+        }
+    }
+    slots.sort_by_key(|s| s.dir.index());
+    Ok(())
+}
+
 fn validate_action(action: &Action, depth: u8) -> Result<(), String> {
     match action {
+        Action::Submenu { .. } => Err("menu con không dùng trong chuỗi bước".into()),
         Action::Hotkey { keys: k } => keys::parse_chord(k).map(|_| ()),
         Action::Command { cmd, .. } if cmd.trim().is_empty() => {
             Err("cần nhập lệnh cần chạy".into())
@@ -301,24 +337,27 @@ impl Profile {
             return Err("Cần ít nhất một tên chương trình, ví dụ notepad.exe".into());
         }
 
-        let mut seen = [false; 8];
-        for slot in &mut self.slots {
-            let i = slot.dir.index();
-            let name = DIR_NAMES[i];
-            if std::mem::replace(&mut seen[i], true) {
-                return Err(format!("Có hai góc cùng hướng {name}"));
-            }
-            slot.label = slot.label.trim().to_string();
-            if slot.label.is_empty() {
-                return Err(format!("Góc {name}: cần tên hiển thị"));
-            }
-            validate_action(&slot.action, 0).map_err(|e| format!("Góc {name}: {e}"))?;
-        }
-        self.slots.sort_by_key(|s| s.dir.index());
+        validate_slots(&mut self.slots, false, "")?;
         Ok(self)
     }
     pub fn slot(&self, dir: usize) -> Option<&Slot> {
-        self.slots.iter().find(|s| s.dir.index() == dir)
+        find_slot(&self.slots, dir)
+    }
+
+    /// Các góc có menu con (bit `1 << hướng`), báo cho hook để kéo qua mép là mở.
+    pub fn submenu_mask(&self) -> u8 {
+        self.slots
+            .iter()
+            .filter(|s| matches!(s.action, Action::Submenu { .. }))
+            .fold(0, |m, s| m | (1 << s.dir.index()))
+    }
+
+    /// Góc `dir` của menu con nằm ở góc `parent`.
+    pub fn sub_slot(&self, parent: usize, dir: usize) -> Option<&Slot> {
+        match &self.slot(parent)?.action {
+            Action::Submenu { slots } => find_slot(slots, dir),
+            _ => None,
+        }
     }
 
     /// Dữ liệu gửi sang trang menu.
@@ -328,18 +367,42 @@ impl Profile {
             name: self.name.clone(),
             process: process.unwrap_or("không rõ app").to_string(),
             icon: self.icon.clone(),
-            slots: (0..8)
-                .map(|i| {
-                    self.slot(i).map(|s| MenuSlot {
-                        label: s.label.clone(),
-                        keys: s.action.describe(),
-                        icon: s.icon.clone(),
-                        unavailable: s.unavailable(ctx),
-                    })
-                })
-                .collect(),
+            slots: ring_view(&self.slots, ctx),
         }
     }
+
+    /// Dữ liệu menu con của góc `parent`, để trang menu thay vòng lệnh tại chỗ.
+    pub fn sub_view(&self, parent: usize, ctx: &Context) -> Option<MenuProfile> {
+        let slot = self.slot(parent)?;
+        let Action::Submenu { slots } = &slot.action else {
+            return None;
+        };
+        Some(MenuProfile {
+            id: format!("{}/{}", self.id, DIR_NAMES[parent]),
+            name: slot.label.clone(),
+            process: self.name.clone(),
+            icon: slot.icon.clone(),
+            slots: ring_view(slots, ctx),
+        })
+    }
+}
+
+fn find_slot(slots: &[Slot], dir: usize) -> Option<&Slot> {
+    slots.iter().find(|s| s.dir.index() == dir)
+}
+
+fn ring_view(slots: &[Slot], ctx: &Context) -> Vec<Option<MenuSlot>> {
+    (0..8)
+        .map(|i| {
+            find_slot(slots, i).map(|s| MenuSlot {
+                label: s.label.clone(),
+                keys: s.action.describe(),
+                icon: s.icon.clone(),
+                unavailable: s.unavailable(ctx),
+                submenu: matches!(s.action, Action::Submenu { .. }),
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -351,6 +414,9 @@ pub struct MenuSlot {
     /// Lý do góc đang tắt (hiện mờ, không chọn được).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unavailable: Option<&'static str>,
+    /// Góc mở menu con.
+    #[serde(skip_serializing_if = "is_false")]
+    pub submenu: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -793,6 +859,91 @@ pub fn defaults() -> Vec<Profile> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn with_window_submenu() -> Profile {
+        let mut p = default_profile();
+        let children = vec![
+            slot(
+                DirName::N,
+                " Phóng to ",
+                "maximize",
+                keys_of(&["Win", "Up"]),
+            ),
+            slot(DirName::S, "Thu nhỏ", "minimize", keys_of(&["Win", "Down"])),
+        ];
+        p.slots[2] = slot(
+            DirName::E,
+            "Cửa sổ",
+            "windows",
+            Action::Submenu { slots: children },
+        );
+        p
+    }
+
+    #[test]
+    fn submenu_round_trips_and_validates() {
+        let p = with_window_submenu().validated().unwrap();
+        assert_eq!(p.submenu_mask(), 1 << 2);
+        assert_eq!(
+            p.sub_slot(2, 0).unwrap().label,
+            "Phóng to",
+            "tên trong menu con cũng được cắt khoảng trắng"
+        );
+        assert!(p.sub_slot(2, 2).is_none());
+        assert!(p.sub_slot(0, 0).is_none(), "góc không có menu con");
+
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains(r#""type":"submenu""#));
+        let back: Profile = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, p);
+
+        let ctx = Context { clipboard: true };
+        let view = p.view(None, &ctx);
+        assert!(view.slots[2].as_ref().unwrap().submenu);
+        assert_eq!(view.slots[2].as_ref().unwrap().keys, "2 lệnh ›");
+        let sub = p.sub_view(2, &ctx).unwrap();
+        assert_eq!(sub.name, "Cửa sổ");
+        assert_eq!(sub.slots[4].as_ref().unwrap().label, "Thu nhỏ");
+        assert!(p.sub_view(0, &ctx).is_none());
+    }
+
+    #[test]
+    fn submenu_rules() {
+        let mut empty = with_window_submenu();
+        empty.slots[2].action = Action::Submenu { slots: vec![] };
+        assert_eq!(
+            empty.validated().unwrap_err(),
+            "Góc Đông: menu con chưa có lệnh nào"
+        );
+
+        let mut nested = with_window_submenu();
+        if let Action::Submenu { slots } = &mut nested.slots[2].action {
+            slots.push(slot(
+                DirName::W,
+                "Thêm",
+                "plus",
+                Action::Submenu { slots: vec![] },
+            ));
+        }
+        assert_eq!(
+            nested.validated().unwrap_err(),
+            "Góc Đông, menu con: Góc Tây: menu con không được lồng nhau"
+        );
+
+        let mut unnamed = with_window_submenu();
+        if let Action::Submenu { slots } = &mut unnamed.slots[2].action {
+            slots[1].label = " ".into();
+        }
+        assert_eq!(
+            unnamed.validated().unwrap_err(),
+            "Góc Đông, menu con: Góc Nam: cần tên hiển thị"
+        );
+
+        let in_sequence = Action::Sequence {
+            steps: vec![Action::Submenu { slots: vec![] }],
+        };
+        assert!(validate_action(&in_sequence, 0).is_err());
+    }
 
     #[test]
     fn defaults_cover_eight_directions_with_valid_keys() {

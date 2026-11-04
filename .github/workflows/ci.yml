@@ -1,9 +1,10 @@
-# Kiểm tra mỗi lần đẩy code lên main: kiểu TypeScript, build giao diện, test Rust.
+# Kiểm tra mỗi lần đẩy code (mọi nhánh): kiểu TypeScript, build giao diện, test Rust.
+# Chạy trên Windows nên phần mã chỉ dành cho Windows (hook, cửa sổ menu) cũng được biên dịch.
 name: Kiểm tra
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
 
 jobs:

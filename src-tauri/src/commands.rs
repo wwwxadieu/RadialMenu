@@ -38,6 +38,8 @@ pub struct StatePayload {
     /// App gần đây dưới con trỏ khi mở menu, mới nhất trước.
     recent: Vec<String>,
     version: &'static str,
+    /// Bản mới đã tìm thấy (nếu có).
+    update: Option<crate::updater::UpdateInfo>,
 }
 
 #[tauri::command]
@@ -56,6 +58,9 @@ pub fn get_state(app: AppHandle) -> StatePayload {
         load_errors: Vec::new(),
         recent: Vec::new(),
         version: env!("CARGO_PKG_VERSION"),
+        update: app
+            .try_state::<crate::updater::UpdateState>()
+            .and_then(|u| u.info()),
     };
     let Some(state) = app.try_state::<AppState>() else {
         return payload;
@@ -268,4 +273,16 @@ fn reveal(path: &std::path::Path) {
     }
     #[cfg(not(windows))]
     let _ = path;
+}
+
+/// Hỏi GitHub có bản mới không. `None` = đang dùng bản mới nhất.
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<Option<crate::updater::UpdateInfo>, String> {
+    crate::updater::check(&app).await
+}
+
+/// Tải và cài bản mới. Trên Windows app thoát khi trình cài đặt chạy.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    crate::updater::install(&app).await
 }

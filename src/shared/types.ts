@@ -9,7 +9,8 @@ export type Action =
   | { type: "text"; text: string }
   | { type: "sequence"; steps: Action[] }
   | { type: "wait"; ms: number }
-  | { type: "settings" };
+  | { type: "settings" }
+  | { type: "submenu"; slots: Slot[] };
 
 export type ActionType = Action["type"];
 
@@ -46,7 +47,17 @@ export interface Settings {
   hideFromCapture: boolean;
   menuScale: number;
   launchAtLogin: boolean;
+  /** Tự hỏi GitHub có bản mới không. */
+  checkUpdates: boolean;
   profilesVersion: number;
+}
+
+/** Bản mới tìm thấy trên GitHub Releases. */
+export interface UpdateInfo {
+  version: string;
+  current: string;
+  notes: string;
+  date: string | null;
 }
 
 export interface AppState {
@@ -63,6 +74,7 @@ export interface AppState {
   loadErrors: string[];
   recent: string[];
   version: string;
+  update: UpdateInfo | null;
 }
 
 export interface AppInfo {
@@ -86,6 +98,7 @@ export type GestureEvent =
   | { kind: "dir"; dir: Dir }
   | { kind: "cancel" }
   | { kind: "away" }
+  | { kind: "drill"; dir: number; label: string; sticky: boolean }
   | { kind: "empty"; dir: number }
   | { kind: "unavailable"; dir: number; label: string; reason: string }
   | { kind: "run"; dir: number; label: string; detail: string; process: string | null }

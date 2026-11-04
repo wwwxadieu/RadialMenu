@@ -97,7 +97,8 @@ fn perform(action: &Action) -> Result<(), String> {
             Ok(())
         }
         // Mở cài đặt do lib.rs xử lý (cần AppHandle); tới được đây thì không làm gì.
-        Action::Settings => Ok(()),
+        // Mở cài đặt và menu con do app xử lý, không phải hành động gửi vào app khác.
+        Action::Settings | Action::Submenu { .. } => Ok(()),
         Action::Wait { ms } => {
             std::thread::sleep(Duration::from_millis((*ms).min(MAX_WAIT_MS)));
             Ok(())

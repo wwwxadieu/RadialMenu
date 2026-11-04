@@ -2,7 +2,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { applyAccent } from "../shared/color";
 import logoSvg from "../shared/logo.svg?raw";
-import type { AppInfo, AppState, GestureEvent, Profile, Settings } from "../shared/types";
+import type { AppInfo, AppState, GestureEvent, Profile, Settings, UpdateInfo } from "../shared/types";
 import { api, errorText } from "./api";
 import { dropdown } from "./controls";
 import { h, icon, toggle } from "./dom";
@@ -10,6 +10,7 @@ import { isDirty, makeDraft, ProfileEditor, type Draft } from "./editor";
 import { dialog, toast } from "./overlay";
 import { guidePage } from "./guide";
 import { appearancePage, backupPage, behaviorPage, describeEvent, logPage, type LogEntry, type PageHost } from "./pages";
+import { checkNow, updateDialog } from "./update";
 import "./style.css";
 
 type Page =
@@ -118,7 +119,41 @@ function renderSide() {
       h("div", { class: "nav-title" }, "CHUNG"),
       h("div", { class: "nav-group" }, ...GENERAL.map((g) => navButton(g.label, g.icon, page.kind === g.kind, () => navigate({ kind: g.kind })))),
     ),
-    h("div", { class: "side-foot" }, pause, h("span", { class: "version" }, `Phiên bản ${app.version}`)),
+    h("div", { class: "side-foot" }, pause, versionRow()),
+  );
+}
+
+/** Dòng phiên bản dưới cùng thanh bên: có bản mới thì hiện nút cập nhật. */
+function versionRow(): HTMLElement {
+  const row = h("div", { class: "version-row" }, h("span", { class: "version" }, `Phiên bản ${app.version}`));
+  if (app.update) {
+    const info = app.update;
+    row.append(h("button", { type: "button", class: "update-pill", onclick: () => updateDialog(info) }, icon("download", 12), `Có bản ${info.version}`));
+  } else {
+    row.append(h("button", { type: "button", class: "link-btn version-check", onclick: () => void checkNow(gotUpdate) }, "Kiểm tra bản mới"));
+  }
+  return row;
+}
+
+/** Kết quả hỏi bản mới (từ nút, từ lõi tự hỏi): nhớ lại rồi vẽ lại phần liên quan. */
+function gotUpdate(info: UpdateInfo | null) {
+  app.update = info;
+  renderSide();
+  // Chỉ thay dải báo ở đầu trang: không vẽ lại cả trang (đang gõ dở thì không mất focus).
+  main.querySelector(".banner.info")?.remove();
+  const banner = updateBanner();
+  if (banner) main.prepend(banner);
+}
+
+function updateBanner(): HTMLElement | null {
+  const info = app.update;
+  if (!info) return null;
+  return h(
+    "p",
+    { class: "banner info" },
+    icon("download", 16),
+    h("span", null, `Có bản mới Radial Menu ${info.version}. `),
+    h("button", { type: "button", class: "link-btn", onclick: () => updateDialog(info) }, "Xem và cập nhật"),
   );
 }
 
@@ -167,10 +202,12 @@ async function saveDraft(): Promise<boolean> {
     saving = false;
     saveError = errorText(e);
     // Lỗi của một góc: chuyển tới góc đó.
-    const m = /^Góc (Bắc|Đông Bắc|Đông|Đông Nam|Nam|Tây Nam|Tây|Tây Bắc):/.exec(saveError);
+    // "Góc X: …" hoặc "Góc X, menu con: Góc Y: …" (lỗi trong menu con của góc X).
+    const D = "(Bắc|Đông Bắc|Đông|Đông Nam|Nam|Tây Nam|Tây|Tây Bắc)";
+    const m = new RegExp(`^Góc ${D}(?:, menu con: Góc ${D})?[:,]`).exec(saveError);
     if (m && editor) {
       const names = ["Bắc", "Đông Bắc", "Đông", "Đông Nam", "Nam", "Tây Nam", "Tây", "Tây Bắc"];
-      editor.selectDir(names.indexOf(m[1]));
+      editor.selectDir(names.indexOf(m[1]), m[2] ? names.indexOf(m[2]) : null);
     }
     renderSavebar();
     return false;
@@ -297,6 +334,8 @@ function render() {
 
 function mount(content: HTMLElement) {
   const banners: HTMLElement[] = [];
+  const updateNote = updateBanner();
+  if (updateNote) banners.push(updateNote);
   if (app.hookError) banners.push(h("p", { class: "banner danger", role: "alert" }, `Chưa cài được hook chuột, menu tròn sẽ không mở: ${app.hookError}`));
   if (app.loadErrors.length && page.kind !== "backup") {
     banners.push(
@@ -566,6 +605,9 @@ async function init() {
     app.paused = ev.payload;
     renderSide();
   });
+  // Lõi tự hỏi thấy bản mới, hoặc người dùng bấm "Cập nhật lên…" ở khay.
+  await listen<UpdateInfo>("update:available", (ev) => gotUpdate(ev.payload));
+  await listen("update:open", () => (app.update ? updateDialog(app.update) : void checkNow(gotUpdate)));
 }
 
 init().catch((err) => {

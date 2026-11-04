@@ -26,6 +26,17 @@ pub const DIR_NAMES: [&str; 8] = [
 /// để mở và chọn nhanh (nhấn, vụt, nhả) thường đi rất xa trong tích tắc.
 pub const FAR_GRACE_MS: u32 = 250;
 
+/// Menu con mở bằng cách nhả chuột (chế độ bấm chọn) tự huỷ nếu bỏ không quá lâu.
+pub const STICKY_TIMEOUT_MS: u32 = 15_000;
+
+/// Nút chuột khác nút phải, để nuốt đúng lần nhả của cú bấm chọn trong menu con.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Button {
+    Left,
+    Middle,
+    X,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Config {
     /// Khoảng kéo tối thiểu để mở menu, tính bằng px logic (màn hình scale 100%).
@@ -35,6 +46,9 @@ pub struct Config {
     /// Kéo ra xa quá khoảng này (px logic, tính từ điểm nhấn) thì menu tự đóng.
     /// `None` = không bao giờ tự đóng.
     pub close_distance_px: Option<f64>,
+    /// Kéo qua mép đĩa menu ở một góc có menu con thì mở menu con (px logic, đã nhân
+    /// kích thước menu). Bấm ngoài vòng này khi đang ở chế độ bấm chọn là huỷ.
+    pub drill_radius_px: f64,
 }
 
 impl Default for Config {
@@ -43,6 +57,7 @@ impl Default for Config {
             threshold_px: 10.0,
             cancel_radius_px: 30.0,
             close_distance_px: Some(450.0),
+            drill_radius_px: 165.0,
         }
     }
 }
@@ -53,8 +68,10 @@ pub enum Phase {
     Idle,
     /// Đang giữ chuột phải nhưng chưa kéo quá ngưỡng. Cú nhấn đã bị giữ lại.
     Pressed,
-    /// Menu đang mở, người dùng đang chọn hướng.
+    /// Menu đang mở, người dùng đang chọn hướng (vẫn giữ chuột phải).
     Open,
+    /// Menu con đã mở bằng cách nhả chuột ở góc của nó: di chuột rồi bấm để chọn.
+    Sticky,
     /// Đã trả nút phải cho Windows; lần nhả tới sẽ đi thẳng.
     Passthrough,
     /// Menu vừa bị huỷ (Esc, nút khác, kéo quá xa); nuốt lần nhả chuột phải còn lại.
@@ -84,6 +101,12 @@ pub enum Effect {
     Release(Option<Dir>),
     /// Kéo ra quá xa: menu tự đóng, không chạy gì.
     Away,
+    /// Mở menu con của góc `dir` ngay tại chỗ. `sticky` = mở bằng cách nhả chuột,
+    /// giờ di chuột rồi bấm để chọn; ngược lại vẫn đang giữ chuột phải.
+    Drill {
+        dir: Dir,
+        sticky: bool,
+    },
     /// Nhả trước ngưỡng: phát lại một cú right-click đầy đủ tại điểm nhấn.
     ReplayClick {
         x: i32,
@@ -106,6 +129,14 @@ pub struct Gesture {
     dir: Option<Dir>,
     /// Thời điểm menu mở (ms, đồng hồ của sự kiện chuột).
     opened_at: u32,
+    /// Các góc của menu đang mở có menu con (bit `1 << dir`). App báo sau khi biết profile.
+    submenus: u8,
+    /// Đang ở menu con.
+    in_submenu: bool,
+    /// Lần nhả của nút vừa dùng để bấm chọn trong menu con: nuốt luôn.
+    swallow_up: Option<Button>,
+    /// Thời điểm sự kiện chuột gần nhất (ms).
+    last_time: u32,
 }
 
 impl Gesture {
@@ -117,6 +148,10 @@ impl Gesture {
             scale: 1.0,
             dir: None,
             opened_at: 0,
+            submenus: 0,
+            in_submenu: false,
+            swallow_up: None,
+            last_time: 0,
         }
     }
 
@@ -129,12 +164,30 @@ impl Gesture {
         self.cfg = cfg;
     }
 
+    /// Góc nào của menu đang mở có menu con (bit `1 << dir`).
+    pub fn set_submenus(&mut self, mask: u8) {
+        self.submenus = mask;
+    }
+
+    fn has_submenu(&self, dir: Option<Dir>) -> bool {
+        !self.in_submenu && dir.is_some_and(|d| self.submenus & (1 << d) != 0)
+    }
+
     /// Chuột phải được nhấn. `scale` = DPI của màn hình chứa con trỏ / 96.
     /// `bypass` = đang tạm dừng hoặc giữ Shift: để Windows xử lý như thường.
     pub fn right_down(&mut self, x: i32, y: i32, scale: f64, bypass: bool) -> (Verdict, Effect) {
+        // Menu con đang chờ bấm chọn: cú nhấn phải là cú bấm chọn.
+        if self.phase == Phase::Sticky {
+            if let Some(result) = self.sticky_click(x, y, None) {
+                return result;
+            }
+        }
         // Một cú nhấn mới luôn bắt đầu lại từ đầu, kể cả khi trạng thái cũ còn kẹt
         // (ví dụ lỡ mất sự kiện nhả lúc Windows chuyển sang màn hình UAC).
         self.dir = None;
+        self.in_submenu = false;
+        self.submenus = 0;
+        self.swallow_up = None;
         if bypass {
             self.phase = Phase::Passthrough;
             return (Verdict::Pass, Effect::None);
@@ -168,17 +221,38 @@ impl Gesture {
                     dir: self.dir,
                 }
             }
-            Phase::Open => {
+            Phase::Open | Phase::Sticky => {
+                self.last_time = time;
                 let (dx, dy) = self.offset(x, y);
+                let dist = dx.hypot(dy);
                 let settled = time.wrapping_sub(self.opened_at) >= FAR_GRACE_MS;
                 if let (Some(limit), true) = (self.cfg.close_distance_px, settled) {
-                    if dx.hypot(dy) > limit * self.scale {
-                        self.phase = Phase::Cancelled;
+                    if dist > limit * self.scale {
+                        // Đang giữ chuột phải thì còn một lần nhả phải nuốt.
+                        self.phase = if self.phase == Phase::Open {
+                            Phase::Cancelled
+                        } else {
+                            Phase::Idle
+                        };
                         self.dir = None;
                         return Effect::Away;
                     }
                 }
                 let dir = direction(dx, dy, self.cfg.cancel_radius_px * self.scale);
+                // Kéo qua mép đĩa ở góc có menu con: mở menu con ngay tại chỗ, giữ
+                // nguyên hướng đang chỉ (góc cùng hướng của menu con sáng lên).
+                if self.phase == Phase::Open
+                    && self.has_submenu(dir)
+                    && dist > self.cfg.drill_radius_px * self.scale
+                {
+                    self.in_submenu = true;
+                    self.opened_at = time;
+                    self.dir = dir;
+                    return Effect::Drill {
+                        dir: dir.unwrap_or_default(),
+                        sticky: false,
+                    };
+                }
                 if dir == self.dir {
                     return Effect::None;
                 }
@@ -199,37 +273,117 @@ impl Gesture {
                 let (x, y) = self.origin;
                 (Verdict::Swallow, Effect::ReplayClick { x, y })
             }
+            // Nhả ở góc có menu con: mở menu con và chờ bấm chọn.
+            Phase::Open if self.has_submenu(self.dir) => {
+                self.phase = Phase::Sticky;
+                self.in_submenu = true;
+                self.opened_at = self.last_time;
+                (
+                    Verdict::Swallow,
+                    Effect::Drill {
+                        dir: self.dir.unwrap_or_default(),
+                        sticky: true,
+                    },
+                )
+            }
             Phase::Open => (Verdict::Swallow, Effect::Release(self.dir.take())),
             Phase::Cancelled => (Verdict::Swallow, Effect::None),
+            // Nhả phải mà không có cú nhấn tương ứng: menu con vẫn chờ bấm chọn.
+            Phase::Sticky => {
+                self.phase = Phase::Sticky;
+                (Verdict::Pass, Effect::None)
+            }
         }
     }
 
-    /// Nút trái, giữa hoặc nút phụ được nhấn. Sự kiện đó luôn được cho qua.
-    pub fn other_button_down(&mut self) -> Effect {
+    /// Hook gọi trước mỗi sự kiện chuột với thời điểm của nó. Menu con đang chờ bấm
+    /// chọn mà bị bỏ không quá lâu thì tự huỷ (trả `Release(None)` để đóng menu), rồi
+    /// sự kiện đó được xử lý như bình thường.
+    pub fn note_time(&mut self, time: u32) -> Effect {
+        self.last_time = time;
+        if self.phase == Phase::Sticky && time.wrapping_sub(self.opened_at) > STICKY_TIMEOUT_MS {
+            self.reset();
+            return Effect::Release(None);
+        }
+        Effect::None
+    }
+
+    /// Bấm (nút bất kỳ) khi menu con đang chờ bấm chọn. `None` = không phải việc của
+    /// menu con (đã hết hạn): xử lý như bình thường.
+    fn sticky_click(
+        &mut self,
+        x: i32,
+        y: i32,
+        button: Option<Button>,
+    ) -> Option<(Verdict, Effect)> {
+        let (dx, dy) = self.offset(x, y);
+        let dir = self.dir;
+        self.reset();
+        if dx.hypot(dy) > self.cfg.drill_radius_px * self.scale * 1.2 {
+            // Bấm hẳn ra ngoài menu: đóng menu, cú bấm đi tiếp tới Windows như thường.
+            return Some((Verdict::Pass, Effect::Release(None)));
+        }
+        match button {
+            // Nút phải: nuốt cả lần nhả sắp tới.
+            None => self.phase = Phase::Cancelled,
+            Some(b) => self.swallow_up = Some(b),
+        }
+        Some((Verdict::Swallow, Effect::Release(dir)))
+    }
+
+    fn reset(&mut self) {
+        self.phase = Phase::Idle;
+        self.dir = None;
+        self.in_submenu = false;
+        self.submenus = 0;
+    }
+
+    /// Nút trái, giữa hoặc nút phụ được nhấn tại (x, y). Thường được cho qua;
+    /// riêng khi menu con đang chờ bấm chọn thì đó là cú bấm chọn và bị nuốt.
+    pub fn other_button_down(&mut self, button: Button, x: i32, y: i32) -> (Verdict, Effect) {
         match self.phase {
             Phase::Pressed => {
                 // Có thể là thao tác bấm hai nút cùng lúc: trả nút phải về cho Windows.
                 self.phase = Phase::Passthrough;
                 let (x, y) = self.origin;
-                Effect::ReplayDown { x, y }
+                (Verdict::Pass, Effect::ReplayDown { x, y })
             }
             Phase::Open => {
                 self.phase = Phase::Cancelled;
                 self.dir = None;
-                Effect::Release(None)
+                (Verdict::Pass, Effect::Release(None))
             }
-            _ => Effect::None,
+            Phase::Sticky => self
+                .sticky_click(x, y, Some(button))
+                .unwrap_or((Verdict::Pass, Effect::None)),
+            _ => (Verdict::Pass, Effect::None),
+        }
+    }
+
+    /// Nút trái, giữa hoặc nút phụ được nhả: nuốt nếu đó là lần nhả của cú bấm chọn.
+    pub fn other_button_up(&mut self, button: Button) -> Verdict {
+        if self.swallow_up == Some(button) {
+            self.swallow_up = None;
+            Verdict::Swallow
+        } else {
+            Verdict::Pass
         }
     }
 
     /// Phím Esc được nhấn. Chỉ có tác dụng khi menu đang mở.
     pub fn escape(&mut self) -> (Verdict, Effect) {
-        if self.phase != Phase::Open {
-            return (Verdict::Pass, Effect::None);
+        match self.phase {
+            Phase::Open => {
+                self.phase = Phase::Cancelled;
+                self.dir = None;
+                (Verdict::Swallow, Effect::Release(None))
+            }
+            Phase::Sticky => {
+                self.reset();
+                (Verdict::Swallow, Effect::Release(None))
+            }
+            _ => (Verdict::Pass, Effect::None),
         }
-        self.phase = Phase::Cancelled;
-        self.dir = None;
-        (Verdict::Swallow, Effect::Release(None))
     }
 
     fn offset(&self, x: i32, y: i32) -> (f64, f64) {
@@ -410,7 +564,10 @@ mod tests {
     fn other_button_hands_right_button_back() {
         let mut g = g();
         g.right_down(10, 20, 1.0, false);
-        assert_eq!(g.other_button_down(), Effect::ReplayDown { x: 10, y: 20 });
+        assert_eq!(
+            g.other_button_down(Button::Left, 10, 20),
+            (Verdict::Pass, Effect::ReplayDown { x: 10, y: 20 })
+        );
         assert_eq!(g.mouse_move(200, 200, 0), Effect::None);
         assert_eq!(g.right_up(), (Verdict::Pass, Effect::None));
     }
@@ -420,7 +577,10 @@ mod tests {
         let mut g = g();
         g.right_down(0, 0, 1.0, false);
         g.mouse_move(80, 0, 0);
-        assert_eq!(g.other_button_down(), Effect::Release(None));
+        assert_eq!(
+            g.other_button_down(Button::Left, 80, 0),
+            (Verdict::Pass, Effect::Release(None))
+        );
         assert_eq!(g.right_up(), (Verdict::Swallow, Effect::None));
     }
 
@@ -436,6 +596,141 @@ mod tests {
     fn release_without_press_passes() {
         let mut g = g();
         assert_eq!(g.right_up(), (Verdict::Pass, Effect::None));
+    }
+
+    /// Menu mở ở (0, 0), góc Bắc (0) có menu con.
+    fn with_submenu_north() -> Gesture {
+        let mut g = g();
+        g.right_down(0, 0, 1.0, false);
+        assert!(matches!(g.mouse_move(0, -20, 0), Effect::Open { .. }));
+        g.set_submenus(1 << 0);
+        g
+    }
+
+    #[test]
+    fn dragging_past_the_edge_opens_submenu_in_place() {
+        let mut g = with_submenu_north();
+        assert_eq!(g.mouse_move(0, -100, 10), Effect::Dir(Some(0)));
+        // Qua mép đĩa (165 px): mở menu con, góc cùng hướng vẫn đang được chỉ.
+        assert_eq!(
+            g.mouse_move(0, -170, 20),
+            Effect::Drill {
+                dir: 0,
+                sticky: false
+            }
+        );
+        // Trong menu con: kéo tiếp không mở thêm tầng nào, chỉ đổi hướng.
+        assert_eq!(g.mouse_move(0, -300, 30), Effect::None);
+        assert_eq!(g.mouse_move(200, -200, 40), Effect::Dir(Some(1)));
+        assert_eq!(g.right_up(), (Verdict::Swallow, Effect::Release(Some(1))));
+        assert_eq!(g.phase(), Phase::Idle);
+    }
+
+    #[test]
+    fn corners_without_submenu_never_drill() {
+        let mut g = with_submenu_north();
+        assert_eq!(g.mouse_move(300, 0, 10), Effect::Dir(Some(2)));
+        assert_eq!(g.right_up(), (Verdict::Swallow, Effect::Release(Some(2))));
+    }
+
+    #[test]
+    fn submenu_resets_close_timer_and_still_closes_when_far() {
+        let mut g = with_submenu_north();
+        g.mouse_move(0, -170, 1000); // mở menu con lúc 1000 ms
+                                     // Ngay sau khi mở menu con, kéo xa chưa đóng.
+        assert_eq!(g.mouse_move(0, -500, 1100), Effect::None);
+        assert_eq!(g.mouse_move(0, -500, 1300), Effect::Away);
+        assert_eq!(g.right_up(), (Verdict::Swallow, Effect::None));
+    }
+
+    #[test]
+    fn releasing_on_submenu_corner_waits_for_a_click() {
+        let mut g = with_submenu_north();
+        g.mouse_move(0, -100, 10);
+        assert_eq!(
+            g.right_up(),
+            (
+                Verdict::Swallow,
+                Effect::Drill {
+                    dir: 0,
+                    sticky: true
+                }
+            )
+        );
+        assert_eq!(g.phase(), Phase::Sticky);
+        // Di chuột chọn góc Đông của menu con rồi bấm trái: chọn, nuốt cả nhấn lẫn nhả.
+        assert_eq!(g.mouse_move(100, 0, 500), Effect::Dir(Some(2)));
+        assert_eq!(
+            g.other_button_down(Button::Left, 100, 0),
+            (Verdict::Swallow, Effect::Release(Some(2)))
+        );
+        assert_eq!(g.other_button_up(Button::Left), Verdict::Swallow);
+        assert_eq!(g.other_button_up(Button::Left), Verdict::Pass);
+        assert_eq!(g.phase(), Phase::Idle);
+    }
+
+    #[test]
+    fn sticky_submenu_right_click_selects_and_swallows_release() {
+        let mut g = with_submenu_north();
+        g.mouse_move(0, -100, 10);
+        g.right_up();
+        g.mouse_move(-80, 0, 100);
+        assert_eq!(
+            g.right_down(-80, 0, 1.0, false),
+            (Verdict::Swallow, Effect::Release(Some(6)))
+        );
+        assert_eq!(g.right_up(), (Verdict::Swallow, Effect::None));
+    }
+
+    #[test]
+    fn sticky_submenu_click_in_center_cancels_and_outside_passes_through() {
+        let mut g = with_submenu_north();
+        g.mouse_move(0, -100, 10);
+        g.right_up();
+        g.mouse_move(5, 5, 100);
+        assert_eq!(
+            g.other_button_down(Button::Left, 5, 5),
+            (Verdict::Swallow, Effect::Release(None))
+        );
+
+        let mut g = with_submenu_north();
+        g.mouse_move(0, -100, 10);
+        g.right_up();
+        // Bấm hẳn ra ngoài menu: đóng menu, cú bấm vẫn tới app bên dưới.
+        assert_eq!(
+            g.other_button_down(Button::Left, 400, 0),
+            (Verdict::Pass, Effect::Release(None))
+        );
+        assert_eq!(g.other_button_up(Button::Left), Verdict::Pass);
+    }
+
+    #[test]
+    fn sticky_submenu_escape_and_timeout() {
+        let mut g = with_submenu_north();
+        g.mouse_move(0, -100, 10);
+        g.right_up();
+        assert_eq!(g.escape(), (Verdict::Swallow, Effect::Release(None)));
+        assert_eq!(g.phase(), Phase::Idle);
+
+        let mut g = with_submenu_north();
+        g.mouse_move(0, -100, 10);
+        g.right_up();
+        assert_eq!(g.note_time(10 + STICKY_TIMEOUT_MS - 1), Effect::None);
+        assert_eq!(
+            g.note_time(10 + STICKY_TIMEOUT_MS + 1),
+            Effect::Release(None)
+        );
+        assert_eq!(g.phase(), Phase::Idle);
+    }
+
+    #[test]
+    fn new_press_clears_submenu_mask() {
+        let mut g = with_submenu_north();
+        g.right_up();
+        g.right_down(0, 0, 1.0, false);
+        g.mouse_move(0, -20, 0);
+        // Mask của menu trước không còn: kéo qua mép Bắc chỉ chọn hướng, không mở menu con.
+        assert_eq!(g.mouse_move(0, -200, 10), Effect::Dir(Some(0)));
     }
 
     #[test]

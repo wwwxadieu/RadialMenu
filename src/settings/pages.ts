@@ -145,6 +145,12 @@ export function behaviorPage(host: PageHost): HTMLElement {
     card(
       "Khởi động",
       toggle("Chạy cùng Windows", s.launchAtLogin, (v) => host.updateSettings({ launchAtLogin: v }), "Tự mở khi đăng nhập, nằm im dưới khay hệ thống."),
+      toggle(
+        "Tự kiểm tra bản mới",
+        s.checkUpdates,
+        (v) => host.updateSettings({ checkUpdates: v }),
+        "Khi có bản mới trên GitHub, Radial Menu báo ở đây và ở khay hệ thống. Chỉ cài khi bạn bấm Cập nhật.",
+      ),
     ),
     h(
       "div",
@@ -286,6 +292,8 @@ export function describeEvent(e: GestureEvent): Omit<LogEntry, "time"> | null {
       return { label: "Huỷ", detail: "nhả ở giữa, bấm Esc hoặc nút khác", tone: "muted" };
     case "away":
       return { label: "Đóng menu", detail: "kéo ra quá xa", tone: "muted" };
+    case "drill":
+      return { label: "Mở menu con", detail: `${e.label} · ${dirText(e.dir)}${e.sticky ? " · bấm để chọn" : ""}`, tone: "accent" };
     case "empty":
       return { label: "Góc trống", detail: dirText(e.dir), tone: "muted" };
     case "unavailable":

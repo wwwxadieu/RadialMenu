@@ -13,6 +13,7 @@ mod probe;
 mod profiles;
 mod settings;
 mod tray;
+mod updater;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -40,6 +41,8 @@ struct Session {
     profile: Profile,
     /// Tình trạng máy lúc mở (clipboard…), quyết định góc nào dùng được.
     ctx: Context,
+    /// Đang ở menu con của góc này.
+    sub: Option<Dir>,
 }
 
 struct AppState {
@@ -95,6 +98,12 @@ enum LogEvent {
     Empty { dir: Dir },
     /// Kéo ra quá xa: menu tự đóng, không chạy gì.
     Away,
+    /// Mở menu con của một góc. `sticky` = mở bằng cách nhả chuột, chờ bấm chọn.
+    Drill {
+        dir: Dir,
+        label: String,
+        sticky: bool,
+    },
     /// Nhả ở một góc đang tắt (ví dụ Dán khi clipboard trống).
     Unavailable {
         dir: Dir,
@@ -144,6 +153,13 @@ impl LogEvent {
             Self::Dir { dir } => format!("hướng {}", name(dir)),
             Self::Cancel => "huỷ".into(),
             Self::Away => "kéo ra quá xa → đóng menu".into(),
+            Self::Drill { label, sticky, .. } => {
+                if *sticky {
+                    format!("mở menu con {label} (bấm để chọn)")
+                } else {
+                    format!("mở menu con {label}")
+                }
+            }
             Self::Empty { dir } => format!("góc {} trống", DIR_NAMES[usize::from(*dir)]),
             Self::Unavailable { label, reason, .. } => format!("{label} đang tắt: {reason}"),
             Self::Run { label, detail, .. } => format!("chạy {label} ({detail})"),
@@ -191,6 +207,17 @@ struct MenuIcon {
 #[derive(Clone, Serialize)]
 struct MenuDir {
     dir: Option<Dir>,
+}
+
+/// Thay vòng lệnh bằng menu con của một góc, ngay tại chỗ.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MenuSub {
+    /// Hướng đang chỉ (góc cùng hướng của menu con sáng lên).
+    dir: Option<Dir>,
+    /// Mở bằng cách nhả chuột: giữa menu nhắc "bấm để chọn".
+    sticky: bool,
+    profile: profiles::MenuProfile,
 }
 
 #[derive(Clone, Serialize)]
@@ -367,6 +394,8 @@ fn handle_effect(app: &AppHandle, effect: Effect) {
                 .unwrap()
                 .resolve(process.as_deref(), class)
                 .clone();
+            // Báo hook ngay: kéo qua mép ở góc có menu con là mở menu con.
+            hook::set_submenus(profile.submenu_mask());
             if let Some(p) = &process {
                 remember_recent(&state, p);
             }
@@ -441,7 +470,28 @@ fn handle_effect(app: &AppHandle, effect: Effect) {
                 target,
                 profile,
                 ctx,
+                sub: None,
             });
+        }
+        Effect::Drill { dir, sticky } => {
+            let mut guard = state.session.lock().unwrap();
+            if let Some(s) = guard.as_mut() {
+                if let Some(view) = s.profile.sub_view(usize::from(dir), &s.ctx) {
+                    s.sub = Some(dir);
+                    let label = view.name.clone();
+                    let _ = app.emit_to(
+                        MENU_WINDOW,
+                        "menu:sub",
+                        MenuSub {
+                            dir: Some(dir),
+                            sticky,
+                            profile: view,
+                        },
+                    );
+                    drop(guard);
+                    log(app, LogEvent::Drill { dir, label, sticky });
+                }
+            }
         }
         Effect::Dir(dir) => {
             let _ = app.emit_to(MENU_WINDOW, "menu:dir", MenuDir { dir });
@@ -449,9 +499,19 @@ fn handle_effect(app: &AppHandle, effect: Effect) {
         }
         Effect::Release(dir) => {
             let session = state.session.lock().unwrap().take();
+            // Ở menu con thì tìm góc trong menu con. Góc có menu con không chạy được
+            // (chỉ gặp khi nhả trước lúc hook biết góc đó có menu con): coi như huỷ.
             let chosen = dir
                 .zip(session.as_ref())
-                .and_then(|(d, s)| s.profile.slot(usize::from(d)).map(|slot| (d, slot.clone())));
+                .and_then(|(d, s)| {
+                    let i = usize::from(d);
+                    match s.sub {
+                        Some(parent) => s.profile.sub_slot(usize::from(parent), i),
+                        None => s.profile.slot(i),
+                    }
+                    .map(|slot| (d, slot.clone()))
+                })
+                .filter(|(_, slot)| !matches!(slot.action, profiles::Action::Submenu { .. }));
 
             let blocked = chosen
                 .as_ref()
@@ -658,6 +718,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
             commands::save_profile,
@@ -671,12 +732,15 @@ pub fn run() {
             commands::reload_config,
             commands::open_config_dir,
             commands::menu_look,
-            commands::menu_frame
+            commands::menu_frame,
+            commands::check_update,
+            commands::install_update
         ])
         .setup(|app| {
             let state = init_state(app.handle());
             let settings = state.settings.read().unwrap().clone();
             app.manage(state);
+            app.manage(updater::UpdateState::default());
             // Cài hook trước tiên: đó là phần cửa sổ cài đặt hỏi tới ngay khi tải xong.
             start_engine(app.handle());
             overlay::setup(app.handle(), settings.hide_from_capture)?;
@@ -692,6 +756,7 @@ pub fn run() {
             if !autostart::launched_at_login() {
                 show_main_window(app.handle());
             }
+            updater::spawn_auto_check(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {

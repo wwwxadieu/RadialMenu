@@ -35,6 +35,8 @@ pub struct Settings {
     /// Kích thước menu tròn so với mặc định (0,8–1,4).
     pub menu_scale: f64,
     pub launch_at_login: bool,
+    /// Tự hỏi GitHub có bản mới không (lúc khởi động và mỗi ngày). Chỉ báo, không tự cài.
+    pub check_updates: bool,
     /// Phiên bản bộ profile mặc định đã ghi ra thư mục cấu hình; dùng để thêm
     /// profile mặc định mới ở bản sau mà không ghi đè file người dùng đã sửa.
     /// File cũ chưa có trường này được hiểu là 0.
@@ -69,6 +71,7 @@ impl Default for Settings {
             hide_from_capture: true,
             menu_scale: 1.0,
             launch_at_login: false,
+            check_updates: true,
             profiles_version: 0,
             settings_version: SETTINGS_VERSION,
         }
@@ -187,6 +190,8 @@ impl Settings {
             threshold_px: self.threshold_px,
             cancel_radius_px: self.cancel_radius_px,
             close_distance_px: self.close_when_far.then_some(self.close_distance_px),
+            // Mép đĩa menu (172 px ở kích thước 100%), lùi vào một chút.
+            drill_radius_px: 165.0 * self.menu_scale,
         }
     }
 

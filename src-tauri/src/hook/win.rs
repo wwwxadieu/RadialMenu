@@ -24,12 +24,13 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetMessageW, PostThreadMessageW, SetCursorPos, SetWindowsHookExW,
     UnhookWindowsHookEx, KBDLLHOOKSTRUCT, LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, WH_KEYBOARD_LL,
-    WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEMOVE, WM_QUIT, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
+    WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
+    WM_MOUSEMOVE, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_XBUTTONDOWN,
+    WM_XBUTTONUP,
 };
 
 use super::{BypassFn, SIGNATURE};
-use crate::gesture::{Config, Effect, Gesture, Verdict};
+use crate::gesture::{Button, Config, Effect, Gesture, Verdict};
 
 /// Thread đang chạy hook, để gửi WM_QUIT khi dừng.
 static HOOK_THREAD: AtomicU32 = AtomicU32::new(0);
@@ -212,25 +213,34 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
 }
 
 fn on_mouse(message: u32, pt: POINT, time: u32) -> Verdict {
-    let (verdict, effect) = GESTURE.with(|g| {
+    let (expired, verdict, effect) = GESTURE.with(|g| {
         let mut g = g.borrow_mut();
-        match message {
+        // Menu con bấm-chọn bỏ không quá lâu thì tự đóng trước khi xử lý sự kiện này.
+        let expired = g.note_time(time);
+        g.set_submenus(super::submenus());
+        let (verdict, effect) = match message {
             WM_RBUTTONDOWN => {
                 if let Some(cfg) = super::take_pending_config() {
                     g.set_config(cfg);
                 }
+                super::clear_submenus();
                 let bypass = super::is_paused() || shift_down() || rule_bypass(pt);
                 let scale = if bypass { 1.0 } else { monitor_scale(pt) };
                 g.right_down(pt.x, pt.y, scale, bypass)
             }
             WM_MOUSEMOVE => (Verdict::Pass, g.mouse_move(pt.x, pt.y, time)),
             WM_RBUTTONUP => g.right_up(),
-            WM_LBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN => {
-                (Verdict::Pass, g.other_button_down())
-            }
+            WM_LBUTTONDOWN => g.other_button_down(Button::Left, pt.x, pt.y),
+            WM_MBUTTONDOWN => g.other_button_down(Button::Middle, pt.x, pt.y),
+            WM_XBUTTONDOWN => g.other_button_down(Button::X, pt.x, pt.y),
+            WM_LBUTTONUP => (g.other_button_up(Button::Left), Effect::None),
+            WM_MBUTTONUP => (g.other_button_up(Button::Middle), Effect::None),
+            WM_XBUTTONUP => (g.other_button_up(Button::X), Effect::None),
             _ => (Verdict::Pass, Effect::None),
-        }
+        };
+        (expired, verdict, effect)
     });
+    dispatch(expired);
     dispatch(effect);
     verdict
 }

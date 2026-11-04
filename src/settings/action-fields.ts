@@ -18,7 +18,11 @@ export const TOP_TYPES: ReadonlyArray<readonly [ActionType, string]> = [
   ["text", "Gõ văn bản"],
   ["sequence", "Chuỗi bước"],
   ["settings", "Mở cài đặt"],
+  ["submenu", "Menu con"],
 ];
+
+/** Loại hành động cho một góc trong menu con: không lồng thêm menu con. */
+export const SUB_TYPES = TOP_TYPES.filter(([t]) => t !== "submenu");
 
 const STEP_TYPES: ReadonlyArray<readonly [ActionType, string]> = [
   ["hotkey", "Phím tắt"],
@@ -55,6 +59,8 @@ export function defaultAction(type: ActionType): Action {
       return { type, ms: 150 };
     case "settings":
       return { type };
+    case "submenu":
+      return { type, slots: [] };
   }
 }
 
@@ -290,6 +296,9 @@ export function actionFields(action: Action, host: ActionHost, compact = false):
       return compact ? h("p", { class: "hint" }, "Không lồng chuỗi bước vào nhau.") : sequenceFields(action, host);
     case "settings":
       return h("p", { class: "hint" }, "Mở cửa sổ cài đặt này của Radial Menu. Không cần nhập gì thêm.");
+    case "submenu":
+      // Trình sửa profile tự vẽ phần này (cần chuyển sang sửa menu con).
+      return h("p", { class: "hint" }, "Menu con: thêm tối đa 8 lệnh nữa ở góc này.");
   }
 }
 

@@ -2,7 +2,7 @@
 // Mọi thay đổi nằm trong bản nháp (`Draft`) tới khi bấm Lưu.
 import { DIRS } from "../shared/geometry";
 import type { AppState, DirId, Profile, Slot } from "../shared/types";
-import { actionFields, defaultAction, groupName, isPaste, TOP_TYPES, type ActionHost } from "./action-fields";
+import { actionFields, defaultAction, groupName, isPaste, SUB_TYPES, TOP_TYPES, type ActionHost } from "./action-fields";
 import { checkbox } from "./controls";
 import { chip, chipAdder, h, icon, segmented, toggle } from "./dom";
 import { libraryPanel, type Preset } from "./library";
@@ -38,6 +38,8 @@ export function makeDraft(profile: Profile, isNew = false): Draft {
 }
 
 const slotAt = (p: Profile, i: number) => p.slots.find((s) => s.dir === DIRS[i].id) ?? null;
+const findIn = (slots: Slot[], i: number) => slots.find((s) => s.dir === DIRS[i].id) ?? null;
+const byDir = (a: Slot, b: Slot) => DIRS.findIndex((x) => x.id === a.dir) - DIRS.findIndex((x) => x.id === b.dir);
 
 /** Bảng bên phải: sửa góc đang chọn, hoặc thư viện lệnh để kéo thả. Giữ qua các lần vẽ lại. */
 let panel: "slot" | "library" = "slot";
@@ -53,14 +55,18 @@ export class ProfileEditor {
   private headBox = h("section", { class: "card head-card", "aria-label": "Thông tin profile" });
   /** Hiện ô thêm lớp cửa sổ (tuỳ chọn nâng cao). */
   private advanced = false;
+  /** Đang sửa menu con của góc này (`null` = vòng chính). */
+  private sub: number | null = null;
+  /** Góc đang chọn trong menu con. */
+  private subSelected = 0;
 
   constructor(private draft: Draft, private host: EditorHost) {
     this.preview = new RadialPreview({
       interactive: true,
       label: "Xem trước menu, chọn góc cần sửa",
       onPick: (i) => {
-        this.draft.selected = i;
-        this.preview.update(this.draft.profile, i);
+        this.selected = i;
+        this.refreshPreview();
         // Bấm vào một góc = muốn sửa góc đó.
         panel = "slot";
         this.renderPanel();
@@ -71,7 +77,84 @@ export class ProfileEditor {
     this.el = h("div", { class: "page profile-page" }, this.headBox, h("div", { class: "editor-grid" }, previewCard, this.slotBox));
     this.renderHead();
     this.renderPanel();
-    this.preview.update(draft.profile, draft.selected);
+    this.refreshPreview();
+  }
+
+  // ---------- Vòng đang sửa: vòng chính hoặc một menu con ----------
+
+  /** Góc đang mở menu con (nếu góc đó vẫn là menu con). */
+  private parentSlot(): (Slot & { action: { type: "submenu"; slots: Slot[] } }) | null {
+    if (this.sub === null) return null;
+    const parent = slotAt(this.draft.profile, this.sub);
+    if (parent && parent.action.type === "submenu") return parent as Slot & { action: { type: "submenu"; slots: Slot[] } };
+    this.sub = null;
+    return null;
+  }
+
+  /** Mảng góc của vòng đang sửa (sửa thẳng vào bản nháp). */
+  private ring(): Slot[] {
+    return this.parentSlot()?.action.slots ?? this.draft.profile.slots;
+  }
+
+  private get selected(): number {
+    return this.parentSlot() ? this.subSelected : this.draft.selected;
+  }
+
+  private set selected(i: number) {
+    if (this.parentSlot()) this.subSelected = i;
+    else this.draft.selected = i;
+  }
+
+  /** Vào sửa menu con của góc `parent` của vòng chính. */
+  private enterSub(parent: number, child = 0) {
+    this.sub = parent;
+    this.subSelected = child;
+    panel = "slot";
+    this.renderPanel();
+    this.refreshPreview();
+  }
+
+  private leaveSub() {
+    if (this.sub === null) return;
+    const parent = this.sub;
+    this.sub = null;
+    this.draft.selected = parent;
+    // Quay lại thì hiện luôn góc vừa sửa (tóm tắt menu con của nó).
+    panel = "slot";
+    this.renderPanel();
+    this.refreshPreview();
+  }
+
+  /** Vẽ hình menu theo vòng đang sửa. */
+  private refreshPreview() {
+    const parent = this.parentSlot();
+    if (!parent) {
+      this.preview.update(this.draft.profile, this.draft.selected);
+      return;
+    }
+    const view: Profile = {
+      ...this.draft.profile,
+      name: parent.label || "Menu con",
+      icon: parent.icon || "grid",
+      slots: parent.action.slots,
+    };
+    this.preview.update(view, this.subSelected, "menu con");
+  }
+
+  /** Dòng trên hình menu: lời nhắc, hoặc đường dẫn quay lại khi đang ở menu con. */
+  private renderNote() {
+    const parent = this.parentSlot();
+    if (!parent) {
+      this.note.className = "card-note";
+      this.note.textContent = panel === "library" ? "Thả lệnh vào một góc để gán cho góc đó" : "Bấm vào một góc để sửa lệnh của góc đó";
+      return;
+    }
+    this.note.className = "card-note crumb";
+    this.note.replaceChildren(
+      h("button", { type: "button", class: "crumb-back", onclick: () => this.leaveSub() }, icon("arrowLeft", 15), this.draft.profile.name || "Profile"),
+      h("span", { class: "crumb-sep", "aria-hidden": "true" }, "/"),
+      h("span", { class: "crumb-here" }, icon(parent.icon || "grid", 15), `Menu con “${parent.label || "chưa đặt tên"}”`),
+    );
   }
 
   // ---------- Bảng bên phải: Sửa góc / Thư viện lệnh ----------
@@ -104,11 +187,11 @@ export class ProfileEditor {
       this.renderPanel();
       (this.tabs.querySelector('[aria-selected="true"]') as HTMLElement | null)?.focus();
     };
-    this.note.textContent = panel === "library" ? "Thả lệnh vào một góc để gán cho góc đó" : "Bấm vào một góc để sửa lệnh của góc đó";
+    this.renderNote();
     if (panel === "library") {
       this.library = libraryPanel({
-        selected: () => this.draft.selected,
-        dirName: (i) => DIRS[i].name,
+        selected: () => this.selected,
+        dirName: (i) => (this.parentSlot() ? `${DIRS[i].name} của menu con` : DIRS[i].name),
         dirAt: (x, y) => this.preview.dirAt(x, y),
         hover: (i) => this.preview.setDrop(i),
         assign: (i, preset) => this.assign(i, preset),
@@ -122,18 +205,22 @@ export class ProfileEditor {
 
   /** Gán một lệnh trong thư viện vào góc `i` (thay lệnh cũ nếu có). */
   private assign(i: number, preset: Preset) {
-    const p = this.draft.profile;
+    const slots = this.ring();
     const dir = DIRS[i].id as DirId;
     const slot: Slot = { dir, label: preset.label, icon: preset.icon, action: structuredClone(preset.action) };
     if (preset.clickFirst) slot.clickFirst = true;
-    const at = p.slots.findIndex((s) => s.dir === dir);
-    const replaced = at >= 0 ? p.slots[at].label : null;
-    if (at >= 0) p.slots[at] = slot;
-    else {
-      p.slots.push(slot);
-      p.slots.sort((a, b) => DIRS.findIndex((x) => x.id === a.dir) - DIRS.findIndex((x) => x.id === b.dir));
+    const at = slots.findIndex((s) => s.dir === dir);
+    const replaced = at >= 0 ? slots[at].label : null;
+    if (at >= 0 && slots[at].action.type === "submenu" && !this.parentSlot()) {
+      toast(`Góc ${DIRS[i].name} đang là menu con. Mở menu con rồi thả lệnh vào trong, hoặc đổi loại của góc trước.`, "info");
+      return;
     }
-    this.draft.selected = i;
+    if (at >= 0) slots[at] = slot;
+    else {
+      slots.push(slot);
+      slots.sort(byDir);
+    }
+    this.selected = i;
     this.touched();
     this.preview.flash(i);
     this.library?.refresh();
@@ -147,7 +234,7 @@ export class ProfileEditor {
 
   /** Bản nháp đổi: vẽ lại phần xem trước và báo ra ngoài. */
   private touched() {
-    this.preview.update(this.draft.profile, this.draft.selected);
+    this.refreshPreview();
     this.host.changed();
   }
 
@@ -278,12 +365,14 @@ export class ProfileEditor {
   // ---------- Góc đang chọn ----------
 
   private renderSlot() {
-    const p = this.draft.profile;
-    const i = this.draft.selected;
+    const slots = this.ring();
+    const parent = this.parentSlot();
+    const i = this.selected;
     const d = DIRS[i];
-    const slot = slotAt(p, i);
+    const slot = findIn(slots, i);
     const title = h("h2", { id: "slot-title" }, slot ? slot.label || "Chưa đặt tên" : "Góc trống");
-    const head = h("div", { class: "slot-head" }, h("span", { class: "eyebrow" }, `GÓC ${d.name.toUpperCase()} ${d.arrow}`), title);
+    const where = parent ? `MENU CON “${(parent.label || "CHƯA ĐẶT TÊN").toUpperCase()}” · ` : "";
+    const head = h("div", { class: "slot-head" }, h("span", { class: "eyebrow" }, `${where}GÓC ${d.name.toUpperCase()} ${d.arrow}`), title);
 
     if (!slot) {
       this.slotBody.replaceChildren(
@@ -293,8 +382,8 @@ export class ProfileEditor {
           type: "button",
           class: "btn primary",
           onclick: () => {
-            p.slots.push({ dir: d.id as DirId, label: "", icon: "star", action: defaultAction("hotkey") });
-            p.slots.sort((a, b) => DIRS.findIndex((x) => x.id === a.dir) - DIRS.findIndex((x) => x.id === b.dir));
+            slots.push({ dir: d.id as DirId, label: "", icon: "star", action: defaultAction("hotkey") });
+            slots.sort(byDir);
             this.touched();
             this.renderSlot();
             (this.slotBody.querySelector(".label-input") as HTMLInputElement | null)?.focus();
@@ -332,11 +421,26 @@ export class ProfileEditor {
       this.touched();
     });
 
-    const types = segmented(groupName(), "Loại hành động", TOP_TYPES, slot.action.type, (t) => {
+    // Trong menu con không lồng thêm menu con.
+    const types = segmented(groupName(), "Loại hành động", parent ? SUB_TYPES : TOP_TYPES, slot.action.type, (t) => {
+      if (slot.action.type === "submenu" && slot.action.slots.length && t !== "submenu") {
+        toast(`Đã bỏ ${slot.action.slots.length} lệnh của menu con. Bấm Huỷ thay đổi nếu đổi nhầm.`, "info");
+      }
       slot.action = defaultAction(t);
       this.touched();
       this.renderSlot();
     });
+
+    if (slot.action.type === "submenu") {
+      this.slotBody.replaceChildren(
+        head,
+        h("div", { class: "field" }, h("label", { for: "slot-label" }, "Tên hiển thị"), h("div", { class: "label-row" }, iconBtn, label)),
+        types,
+        this.submenuSummary(slot.action.slots, i),
+        h("div", { class: "slot-foot" }, this.clearButton(slots, slot)),
+      );
+      return;
+    }
 
     const click = checkbox(
       "Click vào chỗ vừa nhấn trước khi chạy",
@@ -368,27 +472,64 @@ export class ProfileEditor {
       types,
       actionFields(slot.action, host),
       h("div", { class: "checks" }, click, clip),
+      h("div", { class: "slot-foot" }, this.clearButton(slots, slot)),
+    );
+  }
+
+  private clearButton(slots: Slot[], slot: Slot): HTMLButtonElement {
+    return h("button", {
+      type: "button",
+      class: "btn ghost",
+      onclick: () => {
+        const k = slots.indexOf(slot);
+        if (k >= 0) slots.splice(k, 1);
+        this.touched();
+        this.renderSlot();
+      },
+    }, "Để trống góc này");
+  }
+
+  /** Góc là menu con: tóm tắt 8 góc của nó và nút vào sửa. */
+  private submenuSummary(children: Slot[], parent: number): HTMLElement {
+    const grid = h(
+      "div",
+      { class: "sub-grid" },
+      ...DIRS.map((dir, k) => {
+        const c = findIn(children, k);
+        return h(
+          "button",
+          { type: "button", class: `sub-cell${c ? "" : " empty"}`, onclick: () => this.enterSub(parent, k), title: c ? `Sửa ${c.label}` : `Thêm lệnh vào góc ${dir.name}` },
+          h("span", { class: "sub-arrow", "aria-hidden": "true" }, dir.arrow),
+          c ? icon(c.icon || "star", 15) : null,
+          h("span", { class: "sub-label" }, c ? c.label || "Chưa đặt tên" : "Trống"),
+        );
+      }),
+    );
+    return h(
+      "div",
+      { class: "submenu-box" },
       h(
-        "div",
-        { class: "slot-foot" },
-        h("button", {
-          type: "button",
-          class: "btn ghost",
-          onclick: () => {
-            p.slots = p.slots.filter((s: Slot) => s !== slot);
-            this.touched();
-            this.renderSlot();
-          },
-        }, "Để trống góc này"),
+        "p",
+        { class: "hint" },
+        children.length
+          ? `Menu con có ${children.length} lệnh. Khi dùng: kéo vụt qua mép menu ở góc này, hoặc nhả chuột ở góc này rồi di chuột và bấm vào lệnh cần chạy.`
+          : "Menu con chưa có lệnh nào. Mở menu con để thêm lệnh, tối đa 8 lệnh.",
       ),
+      grid,
+      h("button", { type: "button", class: "btn primary", onclick: () => this.enterSub(parent, children.length ? DIRS.findIndex((x) => x.id === children[0].dir) : 0) }, icon("arrowRight", 16), "Mở menu con để sửa"),
     );
   }
 
   /** Chọn góc đầu tiên có lỗi (khi Lưu bị từ chối) để người dùng thấy ngay. */
-  selectDir(i: number) {
+  selectDir(i: number, child: number | null = null) {
+    if (child !== null && slotAt(this.draft.profile, i)?.action.type === "submenu") {
+      this.enterSub(i, child);
+      return;
+    }
+    this.sub = null;
     this.draft.selected = i;
-    this.preview.update(this.draft.profile, i);
     panel = "slot";
     this.renderPanel();
+    this.refreshPreview();
   }
 }

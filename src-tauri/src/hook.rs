@@ -4,7 +4,7 @@
 //! để phần còn lại của app vẫn biên dịch và chạy được (giao diện, test).
 
 use crate::gesture::{Config, Effect};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Mutex;
 
@@ -17,6 +17,8 @@ pub const SIGNATURE: usize = 0x5241_444C;
 pub type BypassFn = Box<dyn Fn(i32, i32) -> bool + Send + 'static>;
 
 static PAUSED: AtomicBool = AtomicBool::new(false);
+/// Các góc có menu con của menu đang mở (bit `1 << hướng`), app báo sau khi biết profile.
+static SUBMENUS: AtomicU8 = AtomicU8::new(0);
 /// Cấu hình cử chỉ mới, hook lấy vào ở lần nhấn kế tiếp.
 static PENDING_CONFIG: Mutex<Option<Config>> = Mutex::new(None);
 
@@ -27,6 +29,22 @@ pub fn set_paused(paused: bool) {
 
 pub fn is_paused() -> bool {
     PAUSED.load(Ordering::Relaxed)
+}
+
+/// Báo các góc có menu con của menu vừa mở (bit `1 << hướng`).
+pub fn set_submenus(mask: u8) {
+    SUBMENUS.store(mask, Ordering::Relaxed);
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn submenus() -> u8 {
+    SUBMENUS.load(Ordering::Relaxed)
+}
+
+/// Cú nhấn mới: quên menu con của menu trước, chờ app báo lại.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn clear_submenus() {
+    SUBMENUS.store(0, Ordering::Relaxed);
 }
 
 /// Đổi ngưỡng kéo / vùng huỷ khi đang chạy (sau khi nạp lại cài đặt).

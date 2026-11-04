@@ -17,6 +17,8 @@ interface Slot {
   icon: string;
   /** Có lý do = góc đang tắt (ví dụ Dán khi clipboard trống): hiện mờ, không chọn được. */
   unavailable?: string;
+  /** Góc mở menu con. */
+  submenu?: boolean;
 }
 
 /** Icon thật của app dưới con trỏ, RGBA base64. */
@@ -40,6 +42,14 @@ interface OpenPayload {
   dir: Dir;
   profile: Profile;
   appIcon: AppIcon | null;
+}
+
+/** Thay vòng lệnh bằng menu con của một góc, ngay tại chỗ. */
+interface SubPayload {
+  dir: Dir;
+  /** Mở bằng cách nhả chuột: di chuột rồi bấm để chọn. */
+  sticky: boolean;
+  profile: Profile;
 }
 
 /** Ảnh nền đã làm mờ của vùng dưới đĩa menu, RGBA base64. */
@@ -177,6 +187,7 @@ function render(p: Profile) {
     item.icon.setAttribute("d", ICONS[slot?.icon ?? ""] ?? "");
     item.node.hidden = !slot;
     item.node.classList.toggle("off", Boolean(slot?.unavailable));
+    item.node.classList.toggle("has-sub", Boolean(slot?.submenu));
   });
   appIcon.setAttribute("d", ICONS[p.icon] ?? ICONS.grid);
   appName.textContent = p.name;
@@ -216,6 +227,9 @@ function open(payload: OpenPayload) {
   window.clearTimeout(closeTimer);
   render(payload.profile);
   currentSeq = payload.seq;
+  root.dataset.level = "root";
+  root.dataset.sticky = "false";
+  root.classList.remove("swap");
   root.dataset.backdrop = "off";
   root.dataset.appicon = "off";
   if (payload.appIcon) paintAppIcon(payload.appIcon);
@@ -235,8 +249,25 @@ function open(payload: OpenPayload) {
   settleTimer = window.setTimeout(() => (root.dataset.settled = "true"), SETTLE_MS);
 }
 
+/** Mở menu con tại chỗ: vòng lệnh đổi sang các lệnh của menu con, giữa menu ghi tên nó. */
+function openSub(payload: SubPayload) {
+  if (root.dataset.phase !== "open") return;
+  render(payload.profile);
+  appProc.textContent = payload.sticky ? "bấm để chọn" : "menu con";
+  root.dataset.level = "sub";
+  root.dataset.sticky = String(payload.sticky);
+  // Icon thật của app không còn đúng nữa: giữa menu dùng icon của góc mở menu con.
+  root.dataset.appicon = "off";
+  // Chạy lại hiệu ứng đổi vòng (xoá rồi gắn lại lớp sau khi trình duyệt tính lại style).
+  root.classList.remove("swap");
+  void root.offsetWidth;
+  root.classList.add("swap");
+  setDir(payload.dir);
+}
+
 function close(mode: CloseMode, dir: Dir) {
   window.clearTimeout(settleTimer);
+  root.classList.remove("swap");
   if (mode === "pick") setDir(dir);
   else if (mode === "away") setDir(null);
   else root.dataset.dirOff = "false";
@@ -299,4 +330,5 @@ listen<AppIcon & { seq: number }>("menu:icon", (e) => {
   if (e.payload.seq === currentSeq && root.dataset.phase !== "idle") paintAppIcon(e.payload);
 });
 listen<{ dir: Dir }>("menu:dir", (e) => setDir(e.payload.dir));
+listen<SubPayload>("menu:sub", (e) => openSub(e.payload));
 listen<{ mode: CloseMode; dir: Dir }>("menu:close", (e) => close(e.payload.mode, e.payload.dir));

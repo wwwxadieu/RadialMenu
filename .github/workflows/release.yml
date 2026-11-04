@@ -1,0 +1,70 @@
+# Phát hành: đẩy một tag dạng v1.2.3 là GitHub tự build bộ cài và tạo release.
+#
+# Trước khi đẩy tag:
+#   1. Nâng phiên bản ở package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml.
+#   2. Viết ghi chú phát hành ở docs/releases/v1.2.3.md.
+#   3. git tag v1.2.3 && git push origin v1.2.3
+#
+# Cần secret TAURI_SIGNING_PRIVATE_KEY (khoá ký bản cập nhật):
+# app chỉ cài bản cập nhật có chữ ký khớp khoá công khai trong tauri.conf.json.
+name: Phát hành
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cài gói npm
+        run: npm ci
+
+      - name: Kiểm tra kiểu và build giao diện
+        run: npm run build
+
+      - name: Test Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build bộ cài có chữ ký cập nhật
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # Mật khẩu của file khoá, không phải bí mật: bí mật là chính khoá trong secret.
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: radialmenu-updater
+        run: npm run tauri build -- --config "${{ github.workspace }}\src-tauri\tauri.release.conf.json"
+
+      - name: Chuẩn bị file phát hành
+        run: node scripts/release.cjs ${{ github.ref_name }}
+
+      - name: Tạo release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "release/RadialMenu_${v}_x64-setup.exe" \
+            release/latest.json \
+            --title "Radial Menu ${v}" \
+            --notes-file release/body.md \
+            --verify-tag

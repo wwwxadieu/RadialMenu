@@ -73,5 +73,16 @@
         "installerHooks": "installer-hooks.nsh"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDAwRDZCNUZBQkJERDExRjIKUldUeUVkMjcrclhXQUQ0WmlVaWtobHlCT1VTU2JvVy9nUXRGZ3BmSnJiQXRGYW9zdU1LR3k1NnkK",
+      "endpoints": [
+        "https://github.com/wwwxadieu/RadialMenu/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
