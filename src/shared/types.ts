@@ -10,6 +10,7 @@ export type Action =
   | { type: "sequence"; steps: Action[] }
   | { type: "wait"; ms: number }
   | { type: "settings" }
+  | { type: "openWith"; app?: string }
   | { type: "submenu"; slots: Slot[] };
 
 export type ActionType = Action["type"];

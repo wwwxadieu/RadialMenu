@@ -32,7 +32,8 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 - **Cử chỉ tự nhiên:** nhấn giữ chuột phải, kéo khoảng 10 px là menu mở ngay tại chỗ nhấn. Nhả ở một góc để chạy lệnh, nhả ở giữa để huỷ.
 - **Bộ lệnh theo từng ứng dụng:** tự nhận ra ứng dụng nằm dưới con trỏ, kể cả cửa sổ đang nằm sau. Desktop và cửa sổ File Explorer có bộ lệnh khác nhau dù cùng là `explorer.exe`.
 - **Thư viện lệnh kéo thả:** hơn 60 lệnh soạn sẵn (Sao chép, Dán, Tab mới, Chụp vùng, Phát/Dừng nhạc…). Kéo một lệnh thả vào góc trên hình menu là xong, không cần tự nhập phím tắt.
-- **6 loại hành động:** gửi phím tắt, chạy chương trình, mở URL hoặc thư mục, gõ một đoạn văn bản (có dấu tiếng Việt), chạy chuỗi nhiều bước, mở cài đặt của Radial Menu.
+- **Menu con, nhiều hơn 8 lệnh:** một góc có thể là menu con chứa thêm 8 lệnh. Kéo vụt qua mép menu ở góc đó là vòng lệnh đổi sang menu con ngay tại chỗ; hoặc nhả chuột ở góc đó rồi di chuột và bấm chọn.
+- **7 loại hành động:** gửi phím tắt, chạy chương trình, mở URL hoặc thư mục, gõ một đoạn văn bản (có dấu tiếng Việt), chạy chuỗi nhiều bước, mở cài đặt của Radial Menu, menu con.
 - **Chọn đúng thứ dưới con trỏ:** với Đổi tên, Xoá, Tới định nghĩa…, app click vào chỗ bạn nhấn trước rồi mới gửi phím, nên lệnh luôn áp vào đúng file hay đúng chữ.
 - **Góc Dán thông minh:** clipboard trống thì góc Dán mờ đi và không chọn được.
 - **Kính mờ thật:** nội dung phía sau menu được làm mờ như tấm kính, cùng hiệu ứng mở và đóng mượt.
@@ -41,6 +42,7 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 - **Biết lúc nào nên đứng ngoài:** không mở trong game hay video toàn màn hình, trong ứng dụng chạy quyền Admin, hoặc trong các ứng dụng bạn liệt kê. Giữ <kbd>Shift</kbd> khi nhấn là luôn ra menu gốc.
 - **Đổi ý giữa chừng:** kéo vụt ra xa là menu tự đóng, hoặc bấm <kbd>Esc</kbd>.
 - **Hướng dẫn ngay trong app:** mục Hướng dẫn trong cửa sổ cài đặt, có minh hoạ cử chỉ, bảng thao tác, mẹo và cách xử lý khi menu không mở.
+- **Tự cập nhật:** app tự kiểm tra GitHub mỗi ngày, có bản mới thì báo ở cửa sổ cài đặt và khay hệ thống. Bấm **Cập nhật** là tải, kiểm tra chữ ký và cài; không bao giờ tự cài khi chưa hỏi.
 - **Sao lưu một chạm:** xuất toàn bộ cài đặt và bộ lệnh ra một file JSON, nhập lại trên máy khác.
 - **Nhẹ:** viết bằng Rust và Tauri; bộ cài khoảng 1,3 MB.
 
@@ -49,6 +51,8 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 | <img src="docs/images/menu-dark.png" alt="Menu tròn tông tối trên trình duyệt, góc Tải lại đang sáng"> | <img src="docs/images/menu-light.png" alt="Menu tròn tông sáng trên trình soạn thảo, góc Emoji đang sáng"> |
 | **Clipboard trống: góc Dán mờ đi** | **Icon thật của ứng dụng ở giữa** |
 | <img src="docs/images/menu-paste-off.png" alt="Menu của File Explorer, góc Dán mờ và ghi Clipboard trống"> | <img src="docs/images/menu-app-icon.png" alt="Giữa menu là icon của trình duyệt và tên bộ lệnh"> |
+| **Menu con mở ngay tại chỗ** | **Có bản mới: bấm Cập nhật là xong** |
+| <img src="docs/images/menu-submenu.png" alt="Menu con Cửa sổ đang mở tại chỗ với các lệnh Phóng to, Thu nhỏ, Xếp sang trái, Xếp sang phải"> | <img src="docs/images/settings-update.png" alt="Hộp thoại có bản mới với ghi chú phát hành và nút Cập nhật ngay"> |
 
 ## Tải về và cài đặt
 
@@ -56,6 +60,8 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 2. Chạy file vừa tải. Bộ cài hỏi quyền Admin vì cài vào `C:\Program Files\Radial Menu` cho mọi tài khoản trên máy.
 3. Bộ cài chưa được ký số, nên Windows SmartScreen có thể hiện cảnh báo. Chọn **More info › Run anyway** để tiếp tục.
 4. Cài xong, Radial Menu chạy dưới khay hệ thống và mở cửa sổ cài đặt.
+
+Từ bản 0.3.0 trở đi không cần tải tay nữa: khi có bản mới, app báo trong cửa sổ cài đặt và ở khay hệ thống, bạn bấm **Cập nhật** là xong.
 
 **Yêu cầu:** Windows 10 (bản 2004 trở lên) hoặc Windows 11, 64-bit. Cần WebView2: Windows 11 có sẵn, còn Windows 10 thì bộ cài tự tải nếu thiếu.
 
@@ -71,6 +77,8 @@ Nhấp chuột phải bình thường (không kéo) vẫn ra menu gốc của Wi
 | Kéo về một hướng rồi nhả | Chạy lệnh của góc đó |
 | Nhả ở giữa menu, bấm <kbd>Esc</kbd>, hoặc bấm nút chuột khác | Đóng menu, không làm gì |
 | Kéo vụt ra xa khỏi menu | Menu tự đóng (đổi ý giữa chừng) |
+| Kéo qua mép menu ở góc có dấu › | Mở menu con tại chỗ, kéo tiếp về hướng cần chọn rồi nhả |
+| Nhả chuột ở góc có dấu › | Mở menu con, di chuột rồi bấm (chuột trái hoặc phải) để chọn |
 | Nhấp chuột phải bình thường, không kéo | Menu chuột phải gốc của Windows |
 | Giữ <kbd>Shift</kbd> khi nhấn chuột phải | Luôn ra menu gốc |
 
@@ -111,6 +119,7 @@ Có ba cách: bấm icon Radial Menu dưới khay hệ thống, chọn góc **C�
 | **Gõ văn bản** | Đoạn chữ sẽ được gõ vào (có xuống dòng, có dấu) | Trân trọng, … |
 | **Chuỗi bước** | Nhiều bước chạy lần lượt: phím tắt, gõ chữ, chờ, chạy lệnh, mở URL | Alt+D → gõ `wt -d .` → Enter |
 | **Mở cài đặt** | Không cần nhập gì | Mở cửa sổ cài đặt này |
+| **Menu con** | Bấm **Mở menu con để sửa**, rồi đặt tối đa 8 lệnh như một vòng menu bình thường | Góc "Cửa sổ" chứa Phóng to, Thu nhỏ, Xếp trái, Xếp phải |
 
 Mỗi góc còn có hai tuỳ chọn:
 
@@ -166,6 +175,8 @@ Mục **Hướng dẫn** ở cuối cột bên trái tóm tắt cách dùng: ba 
 **Chụp màn hình không thấy menu.** Mặc định menu được ẩn khỏi ảnh chụp để làm mờ nền nhanh hơn. Tắt **Ẩn menu khỏi ảnh chụp màn hình** trong trang Giao diện.
 
 **Icon ở giữa menu không đúng với một số ứng dụng.** Các ứng dụng kiểu UWP (Settings, Calculator…) chạy trong một tiến trình chung của Windows nên có thể hiện icon chung chung.
+
+**Cập nhật hỏi quyền Admin.** Radial Menu được cài cho mọi tài khoản trong `C:\Program Files`, nên Windows hỏi quyền Admin khi cài bản mới. Cài xong app tự mở lại, cài đặt và bộ lệnh giữ nguyên. Không muốn app tự kiểm tra bản mới thì tắt **Tự kiểm tra bản mới** trong trang Cử chỉ & khởi động.
 
 **Khoá máy bằng Win+L không được.** Windows chặn gửi Win+L bằng phần mềm, nên bộ Mặc định dùng lệnh khoá máy của hệ thống thay cho phím tắt.
 

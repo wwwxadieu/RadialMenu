@@ -3,8 +3,8 @@
 // báo `host.restructure()` để vẽ lại.
 import { asModifier, joinChord, keyFromCode, MODIFIERS, prettyKey, SPECIAL_KEYS, splitChord } from "../shared/keys";
 import type { Action, ActionType } from "../shared/types";
-import { dropdown } from "./controls";
-import { field, h, icon, nextId } from "./dom";
+import { attachSuggestions, dropdown } from "./controls";
+import { field, h, icon, nextId, segmented } from "./dom";
 
 export interface ActionHost {
   changed(): void;
@@ -18,6 +18,7 @@ export const TOP_TYPES: ReadonlyArray<readonly [ActionType, string]> = [
   ["text", "Gõ văn bản"],
   ["sequence", "Chuỗi bước"],
   ["settings", "Mở cài đặt"],
+  ["openWith", "Mở bằng"],
   ["submenu", "Menu con"],
 ];
 
@@ -59,9 +60,53 @@ export function defaultAction(type: ActionType): Action {
       return { type, ms: 150 };
     case "settings":
       return { type };
+    case "openWith":
+      return { type, app: "" };
     case "submenu":
       return { type, slots: [] };
   }
+}
+
+/** Chương trình hay dùng để mở file, gợi ý khi gõ. */
+const OPEN_WITH_APPS = [
+  { value: "notepad.exe", note: "Notepad" },
+  { value: "code", note: "Visual Studio Code" },
+  { value: "mspaint.exe", note: "Paint" },
+  { value: "msedge.exe", note: "Microsoft Edge" },
+  { value: "chrome.exe", note: "Google Chrome" },
+  { value: "winword.exe", note: "Microsoft Word" },
+  { value: "excel.exe", note: "Microsoft Excel" },
+  { value: "photoshop.exe", note: "Adobe Photoshop" },
+];
+
+function openWithFields(action: Extract<Action, { type: "openWith" }>, host: ActionHost): HTMLElement {
+  const mode = action.app === undefined ? "dialog" : "app";
+  const choose = segmented(groupName(), "Mở file bằng", [["app", "Chương trình chỉ định"], ["dialog", "Hỏi mỗi lần (hộp thoại Windows)"]] as const, mode, (m) => {
+    if (m === "dialog") delete action.app;
+    else action.app = "";
+    host.changed();
+    host.restructure();
+  });
+  const box = h("div", { class: "stack" }, choose);
+  if (mode === "app") {
+    const app = input(action.app ?? "", (v) => {
+      action.app = v;
+      host.changed();
+    }, { class: "input mono", placeholder: "notepad.exe, code, C:\\Tools\\app.exe" });
+    attachSuggestions(app, async () => OPEN_WITH_APPS, (v) => {
+      action.app = v;
+      host.changed();
+    });
+    box.append(field("Chương trình", app, "Tên chương trình trong PATH, tên đã đăng ký với Windows (như msedge.exe) hoặc đường dẫn đầy đủ tới file .exe."));
+  }
+  box.append(
+    h(
+      "p",
+      { class: "hint" },
+      "Mở file hoặc thư mục đang chọn trong File Explorer hay trên Desktop. Nên bật “Click vào chỗ vừa nhấn trước khi chạy” để chọn đúng file dưới con trỏ; tắt nếu muốn mở cùng lúc nhiều file đã chọn sẵn.",
+    ),
+  );
+  return box;
 }
 
 // ---------- Tách / ghép tham số dòng lệnh ----------
@@ -296,6 +341,8 @@ export function actionFields(action: Action, host: ActionHost, compact = false):
       return compact ? h("p", { class: "hint" }, "Không lồng chuỗi bước vào nhau.") : sequenceFields(action, host);
     case "settings":
       return h("p", { class: "hint" }, "Mở cửa sổ cài đặt này của Radial Menu. Không cần nhập gì thêm.");
+    case "openWith":
+      return openWithFields(action, host);
     case "submenu":
       // Trình sửa profile tự vẽ phần này (cần chuyển sang sửa menu con).
       return h("p", { class: "hint" }, "Menu con: thêm tối đa 8 lệnh nữa ở góc này.");

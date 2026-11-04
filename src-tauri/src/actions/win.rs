@@ -3,12 +3,14 @@
 use core::ffi::c_void;
 use std::time::Duration;
 
-use windows::core::{GUID, PCWSTR};
+use windows::core::{Interface, GUID, PCWSTR};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::System::Com::{
-    CoInitializeEx, CoTaskMemFree, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+    CoCreateInstance, CoInitializeEx, CoTaskMemFree, IServiceProvider, CLSCTX_LOCAL_SERVER,
+    COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
 };
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+use windows::Win32::System::Variant::{VARIANT, VT_I4};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     MapVirtualKeyW, SendInput, VkKeyScanW, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT,
     KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MAPVK_VK_TO_VSC,
@@ -16,12 +18,15 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_VIRTUALDESK, MOUSEINPUT, MOUSE_EVENT_FLAGS, VIRTUAL_KEY,
 };
 use windows::Win32::UI::Shell::{
-    FOLDERID_Desktop, FOLDERID_Documents, FOLDERID_Downloads, SHGetKnownFolderPath, ShellExecuteW,
-    KF_FLAG_DEFAULT,
+    FOLDERID_Desktop, FOLDERID_Documents, FOLDERID_Downloads, IFolderView, IShellBrowser,
+    IShellItemArray, IShellWindows, IWebBrowserApp, SHGetKnownFolderPath, SHOpenWithDialog,
+    SID_STopLevelBrowser, ShellExecuteW, ShellWindows, CSIDL_DESKTOP, KF_FLAG_DEFAULT,
+    OAIF_ALLOW_REGISTRATION, OAIF_EXEC, OPENASINFO, SIGDN_FILESYSPATH, SVGIO_SELECTION,
+    SWC_DESKTOP, SWFO_NEEDDISPATCH,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId, SetCursorPos,
-    SetForegroundWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+    GetClassNameW, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId,
+    SetCursorPos, SetForegroundWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
     SM_YVIRTUALSCREEN, SW_SHOWNORMAL,
 };
 
@@ -249,4 +254,144 @@ pub fn open(target: &str) -> Result<(), String> {
     } else {
         Err(format!("không mở được {target}"))
     }
+}
+
+// ---------- Mở bằng: file đang chọn trong File Explorer / Desktop ----------
+
+fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// VARIANT kiểu số nguyên 32 bit (tham số của IShellWindows).
+fn variant_i4(value: i32) -> VARIANT {
+    let mut v = VARIANT::default();
+    unsafe {
+        v.Anonymous.Anonymous.vt = VT_I4;
+        v.Anonymous.Anonymous.Anonymous.lVal = value;
+    }
+    v
+}
+
+fn class_of(hwnd: HWND) -> String {
+    let mut buf = [0u16; 64];
+    let len = unsafe { GetClassNameW(hwnd, &mut buf) };
+    String::from_utf16_lossy(&buf[..len.max(0) as usize])
+}
+
+/// Đường dẫn các mục đang chọn trong một cửa sổ Explorer (qua dịch vụ của trình duyệt shell).
+unsafe fn selection_of(provider: &IServiceProvider) -> windows::core::Result<Vec<String>> {
+    unsafe {
+        let browser: IShellBrowser = provider.QueryService(&SID_STopLevelBrowser)?;
+        let view = browser.QueryActiveShellView()?;
+        let folder: IFolderView = view.cast()?;
+        // Không có mục nào được chọn thì Explorer trả lỗi: coi như danh sách rỗng.
+        let Ok(items) = folder.Items::<IShellItemArray>(SVGIO_SELECTION) else {
+            return Ok(Vec::new());
+        };
+        let mut paths = Vec::new();
+        for i in 0..items.GetCount()? {
+            let Ok(item) = items.GetItemAt(i) else {
+                continue;
+            };
+            // Mục không phải file thật (This PC, thùng rác…) không có đường dẫn: bỏ qua.
+            let Ok(name) = item.GetDisplayName(SIGDN_FILESYSPATH) else {
+                continue;
+            };
+            if let Ok(path) = name.to_string() {
+                paths.push(path);
+            }
+            CoTaskMemFree(Some(name.0 as *const c_void));
+        }
+        Ok(paths)
+    }
+}
+
+/// File đang chọn trong cửa sổ File Explorer `target` (HWND gốc dưới điểm nhấn),
+/// hoặc trên Desktop nếu `target` là màn hình nền.
+pub fn selected_files(target: Option<isize>) -> Result<Vec<String>, String> {
+    const NOT_EXPLORER: &str =
+        "Mở bằng chỉ dùng được với file trong File Explorer hoặc trên Desktop";
+    let root = target.map(|t| HWND(t as *mut c_void)).ok_or(NOT_EXPLORER)?;
+    let class = class_of(root);
+    let fail = |e: windows::core::Error| format!("không đọc được file đang chọn: {e}");
+    unsafe {
+        let windows: IShellWindows =
+            CoCreateInstance(&ShellWindows, None, CLSCTX_LOCAL_SERVER).map_err(fail)?;
+        if class == "Progman" || class == "WorkerW" {
+            let mut hwnd = 0i32;
+            let desktop = windows
+                .FindWindowSW(
+                    &variant_i4(CSIDL_DESKTOP as i32),
+                    &VARIANT::default(),
+                    SWC_DESKTOP,
+                    &mut hwnd,
+                    SWFO_NEEDDISPATCH,
+                )
+                .map_err(fail)?;
+            return selection_of(&desktop.cast::<IServiceProvider>().map_err(fail)?).map_err(fail);
+        }
+        for i in 0..windows.Count().map_err(fail)? {
+            let Ok(item) = windows.Item(&variant_i4(i)) else {
+                continue;
+            };
+            let Ok(browser) = item.cast::<IWebBrowserApp>() else {
+                continue;
+            };
+            match browser.HWND() {
+                Ok(h) if h.0 == root.0 as isize => {}
+                _ => continue,
+            }
+            return selection_of(&browser.cast::<IServiceProvider>().map_err(fail)?).map_err(fail);
+        }
+    }
+    Err(NOT_EXPLORER.into())
+}
+
+/// Chạy `app` với các file làm tham số (mỗi file một tham số, có ngoặc kép).
+pub fn launch_with(app: &str, files: &[String]) -> Result<(), String> {
+    let params = files
+        .iter()
+        .map(|f| format!("\"{f}\""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let (verb, file, args) = (wide("open"), wide(app), wide(&params));
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(file.as_ptr()),
+            PCWSTR(args.as_ptr()),
+            None,
+            SW_SHOWNORMAL,
+        )
+    };
+    if result.0 as isize > 32 {
+        Ok(())
+    } else {
+        Err(format!(
+            "không chạy được {app}: kiểm tra tên hoặc đường dẫn chương trình"
+        ))
+    }
+}
+
+/// Hộp thoại "Open with" của Windows cho `file`. Hộp thoại chờ người dùng chọn, nên chạy
+/// trên thread riêng để các lệnh sau không phải đợi.
+pub fn open_with_dialog(owner: Option<isize>, file: &str) -> Result<(), String> {
+    let file = file.to_string();
+    std::thread::Builder::new()
+        .name("radial-open-with".into())
+        .spawn(move || unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            let path = wide(&file);
+            let info = OPENASINFO {
+                pcszFile: PCWSTR(path.as_ptr()),
+                pcszClass: PCWSTR::null(),
+                oaifInFlags: OAIF_ALLOW_REGISTRATION | OAIF_EXEC,
+            };
+            // Gắn vào cửa sổ Explorer để hộp thoại hiện ngay trên nó.
+            let parent = owner.map(|o| HWND(o as *mut c_void));
+            let _ = SHOpenWithDialog(parent, &info);
+        })
+        .map(|_| ())
+        .map_err(|e| format!("không mở được hộp thoại chọn app: {e}"))
 }

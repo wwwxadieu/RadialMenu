@@ -56,6 +56,13 @@ pub enum Action {
     Wait { ms: u64 },
     /// Mở cửa sổ cài đặt của Radial Menu.
     Settings,
+    /// Mở file đang chọn trong File Explorer hoặc trên Desktop bằng chương trình `app`
+    /// (tên trong PATH, tên đã đăng ký như `msedge.exe`, hoặc đường dẫn đầy đủ).
+    /// Không có `app` = hiện hộp thoại "Open with" của Windows để chọn.
+    OpenWith {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        app: Option<String>,
+    },
     /// Menu con: thêm tối đa 8 lệnh nữa, mở bằng cách kéo qua mép menu ở góc này
     /// hoặc nhả chuột ở góc này rồi bấm chọn. Không lồng thêm menu con bên trong.
     Submenu { slots: Vec<Slot> },
@@ -96,6 +103,12 @@ impl Action {
                 .join(" → "),
             Action::Wait { ms } => format!("chờ {ms} ms"),
             Action::Settings => "mở cài đặt".into(),
+            Action::OpenWith { app: Some(app) } => {
+                let name = app.rsplit(['\\', '/']).next().unwrap_or(app);
+                let name = name.strip_suffix(".exe").unwrap_or(name);
+                format!("mở bằng {name}")
+            }
+            Action::OpenWith { app: None } => "chọn app để mở".into(),
             Action::Submenu { slots } => format!("{} lệnh ›", slots.len()),
         }
     }
@@ -126,6 +139,7 @@ impl Action {
             | Action::Url { .. }
             | Action::Wait { .. }
             | Action::Settings
+            | Action::OpenWith { .. }
             | Action::Submenu { .. } => false,
         }
     }
@@ -278,6 +292,10 @@ fn validate_slots(slots: &mut [Slot], in_submenu: bool, prefix: &str) -> Result<
 fn validate_action(action: &Action, depth: u8) -> Result<(), String> {
     match action {
         Action::Submenu { .. } => Err("menu con không dùng trong chuỗi bước".into()),
+        Action::OpenWith { .. } if depth > 0 => Err("Mở bằng không dùng trong chuỗi bước".into()),
+        Action::OpenWith { app: Some(app) } if app.trim().is_empty() => {
+            Err("cần nhập chương trình để mở file".into())
+        }
         Action::Hotkey { keys: k } => keys::parse_chord(k).map(|_| ()),
         Action::Command { cmd, .. } if cmd.trim().is_empty() => {
             Err("cần nhập lệnh cần chạy".into())
@@ -905,6 +923,35 @@ mod tests {
         assert_eq!(sub.name, "Cửa sổ");
         assert_eq!(sub.slots[4].as_ref().unwrap().label, "Thu nhỏ");
         assert!(p.sub_view(0, &ctx).is_none());
+    }
+
+    #[test]
+    fn open_with_json_describe_and_rules() {
+        let app: Action =
+            serde_json::from_str(r#"{"type":"openWith","app":"C:\\Apps\\Code.exe"}"#).unwrap();
+        assert_eq!(app.describe(), "mở bằng Code");
+        let dialog: Action = serde_json::from_str(r#"{"type":"openWith"}"#).unwrap();
+        assert_eq!(dialog, Action::OpenWith { app: None });
+        assert_eq!(
+            serde_json::to_string(&dialog).unwrap(),
+            r#"{"type":"openWith"}"#
+        );
+        assert_eq!(dialog.describe(), "chọn app để mở");
+        assert!(!app.needs_focus());
+
+        assert!(validate_action(&app, 0).is_ok());
+        assert!(validate_action(&dialog, 0).is_ok());
+        assert!(validate_action(
+            &Action::OpenWith {
+                app: Some(" ".into())
+            },
+            0
+        )
+        .is_err());
+        let in_sequence = Action::Sequence {
+            steps: vec![dialog],
+        };
+        assert!(validate_action(&in_sequence, 0).is_err());
     }
 
     #[test]

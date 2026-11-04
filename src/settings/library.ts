@@ -21,6 +21,13 @@ const hk = (label: string, ico: string, ...keys: string[]): Preset => ({ label, 
 /** Phím tắt cần chọn đúng thứ dưới con trỏ trước (click vào chỗ nhấn). */
 const hkc = (label: string, ico: string, ...keys: string[]): Preset => ({ ...hk(label, ico, ...keys), clickFirst: true });
 const open = (label: string, ico: string, url: string): Preset => ({ label, icon: ico, action: { type: "url", url } });
+/** Mở file đang chọn bằng `app` (`null` = hộp thoại chọn app của Windows); click chọn file trước. */
+const openIn = (label: string, ico: string, app: string | null): Preset => ({
+  label,
+  icon: ico,
+  action: app === null ? { type: "openWith" } : { type: "openWith", app },
+  clickFirst: true,
+});
 const run = (label: string, ico: string, cmd: string, ...args: string[]): Preset => ({
   label,
   icon: ico,
@@ -108,6 +115,29 @@ export const LIBRARY: Group[] = [
     ],
   },
   {
+    name: "Mở bằng",
+    items: [
+      {
+        label: "Mở bằng",
+        icon: "external",
+        action: {
+          type: "submenu",
+          slots: [
+            { dir: "N", label: "Chọn app…", icon: "grid", action: { type: "openWith" }, clickFirst: true },
+            { dir: "E", label: "VS Code", icon: "code", action: { type: "openWith", app: "code" }, clickFirst: true },
+            { dir: "S", label: "Notepad", icon: "pencil", action: { type: "openWith", app: "notepad.exe" }, clickFirst: true },
+            { dir: "W", label: "Paint", icon: "image", action: { type: "openWith", app: "mspaint.exe" }, clickFirst: true },
+          ],
+        },
+      },
+      openIn("Chọn app để mở", "external", null),
+      openIn("Mở bằng Notepad", "pencil", "notepad.exe"),
+      openIn("Mở bằng VS Code", "code", "code"),
+      openIn("Mở bằng Paint", "image", "mspaint.exe"),
+      openIn("Mở bằng Edge", "globe", "msedge.exe"),
+    ],
+  },
+  {
     name: "File Explorer",
     items: [
       hk("Thư mục mới", "folderPlus", "Ctrl", "Shift", "N"),
@@ -145,6 +175,10 @@ export function presetHint(a: Action): string {
       return a.url;
     case "settings":
       return "Mở cài đặt";
+    case "openWith":
+      return a.app ? `mở bằng ${a.app.replace(/\.exe$/i, "")}` : "hỏi chọn app";
+    case "submenu":
+      return `menu con · ${a.slots.length} lệnh`;
     default:
       return "";
   }

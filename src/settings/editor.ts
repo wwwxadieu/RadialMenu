@@ -215,6 +215,10 @@ export class ProfileEditor {
       toast(`Góc ${DIRS[i].name} đang là menu con. Mở menu con rồi thả lệnh vào trong, hoặc đổi loại của góc trước.`, "info");
       return;
     }
+    if (preset.action.type === "submenu" && this.parentSlot()) {
+      toast("Không đặt menu con bên trong menu con. Quay lại vòng chính rồi thả vào một góc.", "info");
+      return;
+    }
     if (at >= 0) slots[at] = slot;
     else {
       slots.push(slot);
@@ -427,6 +431,8 @@ export class ProfileEditor {
         toast(`Đã bỏ ${slot.action.slots.length} lệnh của menu con. Bấm Huỷ thay đổi nếu đổi nhầm.`, "info");
       }
       slot.action = defaultAction(t);
+      // Mở bằng cần chọn đúng file dưới con trỏ: bật sẵn click trước.
+      if (t === "openWith") slot.clickFirst = true;
       this.touched();
       this.renderSlot();
     });

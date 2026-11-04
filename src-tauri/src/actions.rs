@@ -64,7 +64,26 @@ fn execute(job: &Job) -> Result<(), String> {
             platform::activate(hwnd);
         }
     }
+    if let Action::OpenWith { app } = &job.action {
+        if job.click_first {
+            // Chờ Explorer chọn xong file vừa được click.
+            std::thread::sleep(Duration::from_millis(120));
+        }
+        return open_with(job.target, app.as_deref());
+    }
     perform(&job.action)
+}
+
+/// Mở file đang chọn trong cửa sổ File Explorer `target` (hoặc trên Desktop).
+fn open_with(target: Option<isize>, app: Option<&str>) -> Result<(), String> {
+    let files = platform::selected_files(target)?;
+    if files.is_empty() {
+        return Err("chưa chọn file nào trong File Explorer hoặc trên Desktop".into());
+    }
+    match app {
+        Some(app) => platform::launch_with(&expand_env(app.trim()), &files),
+        None => platform::open_with_dialog(target, &files[0]),
+    }
 }
 
 fn perform(action: &Action) -> Result<(), String> {
@@ -96,9 +115,10 @@ fn perform(action: &Action) -> Result<(), String> {
             }
             Ok(())
         }
-        // Mở cài đặt do lib.rs xử lý (cần AppHandle); tới được đây thì không làm gì.
         // Mở cài đặt và menu con do app xử lý, không phải hành động gửi vào app khác.
         Action::Settings | Action::Submenu { .. } => Ok(()),
+        // Cần cửa sổ đích, xử lý ở `execute`; tới được đây (trong chuỗi bước) thì bỏ qua.
+        Action::OpenWith { .. } => Ok(()),
         Action::Wait { ms } => {
             std::thread::sleep(Duration::from_millis((*ms).min(MAX_WAIT_MS)));
             Ok(())
@@ -180,6 +200,15 @@ mod platform {
     }
     pub fn known_folder(_name: &str) -> Option<String> {
         None
+    }
+    pub fn selected_files(_target: Option<isize>) -> Result<Vec<String>, String> {
+        Err(UNSUPPORTED.into())
+    }
+    pub fn launch_with(_app: &str, _files: &[String]) -> Result<(), String> {
+        Err(UNSUPPORTED.into())
+    }
+    pub fn open_with_dialog(_owner: Option<isize>, _file: &str) -> Result<(), String> {
+        Err(UNSUPPORTED.into())
     }
 }
 
