@@ -83,7 +83,7 @@ scripts/release.cjs           chuẩn bị file phát hành (bộ cài, latest.j
 src-tauri/installer-hooks.nsh bước thêm khi gỡ cài đặt (xoá mục chạy cùng Windows, trừ khi đang cập nhật)
 src-tauri/tauri.release.conf.json  bật tạo chữ ký cập nhật, chỉ dùng khi phát hành
 .github/workflows/ci.yml      kiểm tra mỗi lần đẩy code (Windows)
-.github/workflows/release.yml build và tạo release khi đẩy tag v*
+.github/workflows/release.yml build và tạo release khi đẩy tag v* hoặc chạy tay (Run workflow)
 docs/releases/                ghi chú phát hành của từng bản
 ```
 
@@ -148,7 +148,7 @@ Bản phát hành do GitHub Actions build (`.github/workflows/release.yml`), có
 
 1. Nâng phiên bản ở `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (và chạy `cargo check` để cập nhật `Cargo.lock`).
 2. Viết ghi chú ở `docs/releases/vX.Y.Z.md`. Ghi chú này hiện trên trang release và trong hộp thoại cập nhật của app (bỏ ảnh).
-3. Đẩy code lên `main`, rồi `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. Đẩy code lên `main`, rồi `git tag vX.Y.Z && git push origin vX.Y.Z`. Không đẩy tag được thì vào tab **Actions › Phát hành › Run workflow**, chọn nhánh `main`, nhập `vX.Y.Z`: workflow build từ `main` và tự tạo tag khi đăng release.
 
 Workflow chạy test, build bộ cài với `--config src-tauri/tauri.release.conf.json` để tạo file chữ ký `.sig`, rồi `scripts/release.cjs` chuẩn bị `RadialMenu_X.Y.Z_x64-setup.exe`, `latest.json` và ghi chú (kèm SHA-256) cho `gh release create`.
 
